@@ -1,0 +1,50 @@
+name: Actualizar datos NBA
+
+on:
+  schedule:
+    - cron: '20 6 * * *'
+    - cron: '20 10 * * *'
+    - cron: '20 17 * * *'
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: 'Backfill desde (AAAA-MM-DD). Vacío = incremental'
+        required: false
+      hasta:
+        description: 'Backfill hasta (AAAA-MM-DD)'
+        required: false
+      tipos:
+        description: 'Tipos de temporada: 2=regular, 3=playoffs, 5=play-in (ej. 2,5,3)'
+        required: false
+        default: '2'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Bajar box scores de ESPN
+        env:
+          SEASON_TYPES: ${{ github.event.inputs.tipos || '2' }}
+        run: node scripts/update.mjs ${{ github.event.inputs.desde }} ${{ github.event.inputs.hasta }}
+      - name: Guardar cambios
+        run: |
+          git config user.name "nba-jam-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "Sin cambios"
+          else
+            git commit -m "datos: $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
