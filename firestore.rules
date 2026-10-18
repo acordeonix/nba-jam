@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ⚠️ Cambia este correo por la cuenta de Google del administrador (en minúsculas).
+    function admins() { return ['jon.mgonza@gmail.com']; }
+
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function email() { return request.auth.token.email.lower(); }
+    function isAdmin() { return signedIn() && email() in admins(); }
+    function accessDoc() { return /databases/$(database)/documents/config/access; }
+    function isAllowed() {
+      return isAdmin() || (signedIn() && exists(accessDoc()) && email() in get(accessDoc()).data.allowed);
+    }
+
+    // Datos de cada usuario: solo él mismo y solo si está aprobado. Nadie más (ni el admin) los puede leer.
+    match /users/{userId}/{document=**} {
+      allow read, write: if isAllowed() && request.auth.uid == userId;
+    }
+
+    // Lista de correos aprobados: solo el administrador.
+    match /config/access {
+      allow read, write: if isAdmin();
+    }
+
+    // Solicitudes de acceso: cada quien crea la suya; el admin las ve y las borra.
+    match /requests/{userId} {
+      allow create, update: if signedIn() && request.auth.uid == userId
+                            && request.resource.data.email == email()
+                            && request.resource.data.keys().hasOnly(['email', 'name', 'ts']);
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow delete: if isAdmin();
+    }
+  }
+}
