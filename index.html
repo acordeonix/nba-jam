@@ -129,6 +129,10 @@ details.hist summary{cursor:pointer;font:600 12px Barlow,sans-serif;text-transfo
 button.mini{min-height:22px;padding:0 6px;font-size:11px}
 .card:has(details.lu[open]),.card:has(details[data-open$="|h2h"][open]){grid-column:1/-1}
 .adjnote{padding:6px 14px 8px;border-top:1px dashed var(--line)} .adjnote .badge{transform:scale(.85)}
+.odds{display:inline-flex;align-items:center;gap:4px}
+.oddsIn{width:62px;min-height:30px;padding:4px 6px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px}
+.oddsIn.bad{border-color:var(--under);color:var(--under)}
+.valrow{padding-top:2px}
 .det{border-top:1px solid var(--line);padding:8px 14px 12px}
 .det summary{cursor:pointer;font:600 12px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .det table{font-size:12.5px;margin-top:6px} .det th{position:static;cursor:default} .det td,.det th{padding:4px 6px}
@@ -332,7 +336,7 @@ const store = {
 const S = {
   games: [], meta: null, slateFile: [],
   metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: store.get('adj','0.5'),
-  lines: store.get('lines', {}), hist: store.get('hist', {}), picks: store.get('picks', []), manual: store.get('manual', []),
+  lines: store.get('lines', {}), hist: store.get('hist', {}), odds: store.get('odds', {}), picks: store.get('picks', []), manual: store.get('manual', []),
   live: [], liveOk: null, eqSort: store.get('eqSort', ['tot', -1]),
 };
 
@@ -547,6 +551,37 @@ function adjNote(P, h, a){
   return `<div class="meta adjnote"><span>Bajas (resto recupera ${Math.round(ad.rec*100)}%): ${[part(a,ad.a), part(h,ad.h)].filter(Boolean).join(' · ')}</span></div>`;
 }
 
+// ---------- momios ----------
+// Acepta americano (-115, +105, 120) o decimal (1.91). Devuelve el momio decimal o null.
+function oddsDec(raw){
+  if(raw==null) return null;
+  const t = String(raw).trim().replace(',', '.');
+  if(!t) return null;
+  const n = Number(t);
+  if(!Number.isFinite(n)) return null;
+  if(/^[+-]/.test(t) || Math.abs(n) >= 100){
+    if(Math.abs(n) < 100) return null;
+    return n > 0 ? 1 + n/100 : 1 + 100/(-n);
+  }
+  return n > 1 ? n : null;
+}
+// Valor esperado por unidad apostada y probabilidad que necesitas para empatar
+function valueOf(p, dec){ return (p==null || !dec) ? null : { ev: p*dec - 1, need: 1/dec }; }
+function valueHTML(E, key){
+  const od = S.odds[key]; if(!od || E.pOver==null) return '';
+  const dO = oddsDec(od.o), dU = oddsDec(od.u);
+  if(!dO && !dU) return '';
+  const vO = valueOf(E.pOver, dO), vU = valueOf(1-E.pOver, dU);
+  const best = [['OVER',vO],['UNDER',vU]].filter(x=>x[1]).sort((a,b)=>b[1].ev-a[1].ev)[0];
+  const vig = dO && dU ? (1/dO + 1/dU - 1) : null;
+  const part = (lbl, v, p) => v ? `<span>${lbl}: necesitas <b>${Math.round(v.need*100)}%</b>, modelo <b>${Math.round(p*100)}%</b> → <b style="color:${v.ev>0?'var(--over)':'var(--under)'}">${v.ev>0?'+':''}${(v.ev*100).toFixed(1)}%</b></span>` : '';
+  return `<div class="meta valrow">
+    ${best && best[1].ev>0 ? `<span class="pill ${best[0]==='OVER'?'over':'under'}">VALOR ${best[0]} +${(best[1].ev*100).toFixed(1)}%</span>` : '<span class="pill">SIN VALOR</span>'}
+    ${part('Over', vO, E.pOver)} ${part('Under', vU, 1-E.pOver)}
+    ${vig!=null?`<span class="note">comisión de la casa ${(vig*100).toFixed(1)}%</span>`:''}
+  </div>`;
+}
+
 // ---------- render: partidos ----------
 const lineKey = (id, m=S.metric) => `${id}|${m}`;
 function finalFromDB(id){ return S.games.find(g=>g.id===id); }
@@ -614,11 +649,16 @@ function renderCardsInner(){
       <div class="lineRow">
         <span class="k">${g.state==='in'?'Línea en vivo':'Línea'}</span><input type="number" step="0.5" class="lineIn" value="${line}" placeholder="—" data-moment="${momentLabel(g)}" data-min="${el??0}">
         ${sugPill}
+        <span class="odds"><span class="k">Momio</span>
+          <input type="text" inputmode="decimal" class="oddsIn${S.odds[key]?.o && !oddsDec(S.odds[key].o)?' bad':''}" data-side="o" value="${S.odds[key]?.o ?? ''}" placeholder="O" title="Momio del OVER: -115, +105 o 1.91">
+          <input type="text" inputmode="decimal" class="oddsIn${S.odds[key]?.u && !oddsDec(S.odds[key].u)?' bad':''}" data-side="u" value="${S.odds[key]?.u ?? ''}" placeholder="U" title="Momio del UNDER: -105, +100 o 1.95">
+        </span>
         <div class="pick">
           <button class="o ${pick?.pick==='OVER'?'sel':''}" data-pick="OVER">OVER</button>
           <button class="u ${pick?.pick==='UNDER'?'sel':''}" data-pick="UNDER">UNDER</button>
         </div>
       </div>
+      ${E.sug ? valueHTML(E, key) : ''}
       ${E.sug ? `<div class="meta">
         <span>Prob. over aprox <b>${E.pOver!=null?Math.round(E.pOver*100)+'%':'—'}</b></span>
         ${LV ? `<span>Faltan <b>${fmt(LV.rem,1)}'</b> · ${(cur??0) > Number(line) ? '<b style="color:var(--over)">ya pasó la línea</b>' : `necesita <b>${fmt(Math.floor(Number(line)) + 1 - (cur??0),0)}</b> más para over`}</span>` : `
@@ -628,8 +668,8 @@ function renderCardsInner(){
       ${hist.length ? `<details class="hist" ${S.openHist?.[key]?'open':''} data-key="${key}"><summary>Movimiento de línea (${hist.length})</summary>
         ${histChart(hist, P.proj, seg, (g.state==='post'||db) ? cur : null)}
         <div class="legend"><span class="lg-line">línea</span><span class="lg-proj">proy. en vivo</span><span class="lg-pre">proy. previa</span>${(g.state==='post'||db)?'<span class="lg-fin">real</span>':''}</div>
-        <table class="htab"><thead><tr><th>Momento</th><th class="n">Línea</th><th class="n">Actual</th><th class="n">Proy.</th><th class="n">P(over)</th><th></th></tr></thead><tbody>
-        ${hist.map((x,i)=>`<tr><td>${x.label}</td><td class="n">${fmt(x.line)}</td><td class="n">${x.cur??'—'}</td><td class="n">${fmt(x.proj)}</td><td class="n">${x.pOver!=null?Math.round(x.pOver*100)+'%':'—'}</td><td><button data-hdel="${i}" class="mini">✕</button></td></tr>`).join('')}
+        <table class="htab"><thead><tr><th>Momento</th><th class="n">Línea</th><th class="n">Actual</th><th class="n">Proy.</th><th class="n">P(over)</th><th class="n">Momio O/U</th><th></th></tr></thead><tbody>
+        ${hist.map((x,i)=>`<tr><td>${x.label}</td><td class="n">${fmt(x.line)}</td><td class="n">${x.cur??'—'}</td><td class="n">${fmt(x.proj)}</td><td class="n">${x.pOver!=null?Math.round(x.pOver*100)+'%':'—'}</td><td class="n">${x.oO||x.oU?`${x.oO||'—'} / ${x.oU||'—'}`:'—'}</td><td><button data-hdel="${i}" class="mini">✕</button></td></tr>`).join('')}
         </tbody></table></details>` : ''}
       ${h2hHTML(g, key, line, S.asOf)}
       ${lineupHTML(g, key)}
@@ -637,6 +677,18 @@ function renderCardsInner(){
   }).join('');
 }
 $('cards').addEventListener('change', e => {
+  if(e.target.classList.contains('oddsIn')){
+    const card = e.target.closest('.card'), key = lineKey(card.dataset.id), side = e.target.dataset.side;
+    const v = e.target.value.trim();
+    const o = { ...(S.odds[key] || {}) };
+    if(v==='') delete o[side]; else o[side] = v;
+    if(Object.keys(o).length) S.odds[key] = o; else delete S.odds[key];
+    store.set('odds', S.odds);
+    if(S.lines[key]!=null) logLine(card, key, S.lines[key]);   // queda en el historial junto con la línea
+    Sync.saveLine(key);
+    renderCards();
+    return;
+  }
   if(!e.target.classList.contains('lineIn')) return;
   const card = e.target.closest('.card'); const v = e.target.value;
   const key = lineKey(card.dataset.id);
@@ -659,8 +711,10 @@ function evalCard(card, line){
 function cardGame(card){ return S.live.find(x=>x.id===card.dataset.id) || null; }
 function logLine(card, key, line){
   const { g, LV, P, cur, el, E } = evalCard(card, line);
+  const od = S.odds[key] || {};
   const entry = { ts:Date.now(), min: el ?? 0, label: g ? momentLabel(g) : 'Pre', line, cur: g?.state==='in' ? cur : null,
-    proj: E.proj!=null ? +E.proj.toFixed(2) : null, pOver: E.pOver!=null ? +E.pOver.toFixed(3) : null };
+    proj: E.proj!=null ? +E.proj.toFixed(2) : null, pOver: E.pOver!=null ? +E.pOver.toFixed(3) : null,
+    oO: od.o || null, oU: od.u || null };
   const H = (S.hist[key] ||= []);
   const last = H.at(-1);
   if(last && last.label===entry.label && Math.abs(last.min-entry.min)<0.5) H[H.length-1] = entry; else H.push(entry);
@@ -691,7 +745,10 @@ $('cards').addEventListener('click', e => {
   const i = phase==='pre' ? S.picks.findIndex(p=>p.id===id && p.metric===S.metric && (p.phase||'pre')==='pre') : -1;
   if(i>=0 && S.picks[i].pick===pk){ Sync.deletePick(pickId(S.picks[i])); S.picks.splice(i,1); }
   else {
+    const od = S.odds[lineKey(id)] || {}, oddsRaw = pk==='OVER' ? od.o : od.u, dec = oddsDec(oddsRaw);
+    const pSide = E.pOver!=null ? (pk==='OVER' ? E.pOver : 1-E.pOver) : null;
     const rec = { uid: Date.now().toString(36), id, date:$('slateDate').value, metric:S.metric, h:card.dataset.h, a:card.dataset.a, line, pick:pk,
+      odds: dec ? oddsRaw : null, dec: dec ? +dec.toFixed(4) : null, ev: dec && pSide!=null ? +(pSide*dec-1).toFixed(4) : null,
       phase, moment: g ? momentLabel(g) : 'Pre', curAtPick: phase==='vivo' ? cur : null,
       proj: E.proj!=null?+E.proj.toFixed(2):null, sug:E.sug||null, created:new Date().toISOString() };
     if(i>=0){ Sync.deletePick(pickId(S.picks[i])); S.picks[i]=rec; } else S.picks.push(rec);
@@ -763,7 +820,8 @@ function gradePick(p){
     if(lv && k && lv.h.st[k]!=null){ tot = lv.h.st[k]+lv.a.st[k]; done = lv.state==='post'; } }
   let res = '';
   if(done){ res = tot===p.line ? 'P' : ((tot>p.line) === (p.pick==='OVER')) ? 'W' : 'L'; }
-  return { tot, res };
+  const units = !res || !p.dec ? null : res==='W' ? p.dec - 1 : res==='L' ? -1 : 0;
+  return { tot, res, units };
 }
 function renderPicks(){
   const rows = [...S.picks].sort((x,y)=>(y.date||'').localeCompare(x.date||'')).map(p=>({...p, ...gradePick(p)}));
@@ -774,13 +832,17 @@ function renderPicks(){
   $('pickKpis').innerHTML = [
     ['Récord', `${W}-${Lo}${Pu?'-'+Pu:''}`], ['% acierto', W+Lo?Math.round(100*W/(W+Lo))+'%':'—'], ['Pendientes', pend],
     ['Modelo (sugerencia)', sugRows.length?`${sugW}-${sugRows.length-sugW} · ${Math.round(100*sugW/sugRows.length)}%`:'—'],
+    ...(() => { const u = rows.filter(r=>r.units!=null); if(!u.length) return [['Unidades','—']];
+      const tot = u.reduce((s,r)=>s+r.units,0);
+      return [['Unidades', `<span style="color:${tot>=0?'var(--over)':'var(--under)'}">${tot>=0?'+':''}${tot.toFixed(2)}</span>`], ['ROI', `${(100*tot/u.length).toFixed(1)}% <span class="note" style="font-size:12px">(${u.length})</span>`]]; })(),
   ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
   if(!rows.length){ $('pickTable').innerHTML = '<tr><td class="empty">Todavía no hay picks. En "Partidos", pon la línea y elige OVER o UNDER.</td></tr>'; return; }
-  $('pickTable').innerHTML = `<thead><tr><th>Fecha</th><th>Partido</th><th>Parámetro</th><th>Momento</th><th class="n">Línea</th><th class="n">Proy.</th><th>Sugerencia</th><th>Pick</th><th class="n">Real</th><th>Res.</th><th></th></tr></thead><tbody>${
+  $('pickTable').innerHTML = `<thead><tr><th>Fecha</th><th>Partido</th><th>Parámetro</th><th>Momento</th><th class="n">Línea</th><th class="n">Momio</th><th class="n">Proy.</th><th>Sugerencia</th><th>Pick</th><th class="n">Real</th><th>Res.</th><th class="n">Unid.</th><th></th></tr></thead><tbody>${
     rows.map(r=>`<tr><td>${r.date||''}</td><td>${badge(r.a)} @ ${badge(r.h)}</td><td>${METRICS[r.metric]?.label||r.metric}</td><td>${r.moment||'Pre'}${r.curAtPick!=null?` <span class="note">(iba ${r.curAtPick})</span>`:''}</td>
-      <td class="n">${fmt(r.line)}</td><td class="n">${fmt(r.proj)}</td><td>${r.sug?`<span class="pill ${r.sug==='OVER'?'over':'under'}">${r.sug}</span>`:''}</td>
+      <td class="n">${fmt(r.line)}</td><td class="n">${r.odds??'—'}${r.ev!=null?` <span class="note">(${r.ev>0?'+':''}${(r.ev*100).toFixed(0)}%)</span>`:''}</td><td class="n">${fmt(r.proj)}</td><td>${r.sug?`<span class="pill ${r.sug==='OVER'?'over':'under'}">${r.sug}</span>`:''}</td>
       <td><span class="pill ${r.pick==='OVER'?'over':'under'}">${r.pick}</span></td><td class="n">${r.tot??'—'}</td>
       <td class="res-${r.res}">${r.res==='W'?'Ganado':r.res==='L'?'Perdido':r.res==='P'?'Push':'Pendiente'}</td>
+      <td class="n" style="color:${r.units>0?'var(--over)':r.units<0?'var(--under)':'inherit'}">${r.units==null?'—':(r.units>0?'+':'')+r.units.toFixed(2)}</td>
       <td><button data-del="${r.uid||r.created}" style="min-height:26px;padding:0 8px">✕</button></td></tr>`).join('')}</tbody>`;
 }
 $('pickTable').addEventListener('click', e => {
@@ -790,20 +852,20 @@ $('pickTable').addEventListener('click', e => {
 });
 function download(name, text, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 $('expCsv').onclick = () => {
-  const head = 'fecha,visita,local,parametro,momento,iba,linea,proyeccion,sugerencia,pick,real,resultado';
-  const lines = S.picks.map(p=>{ const g=gradePick(p); return [p.date,p.a,p.h,p.metric,`"${p.moment||'Pre'}"`,p.curAtPick??'',p.line,p.proj??'',p.sug??'',p.pick,g.tot??'',g.res].join(','); });
+  const head = 'fecha,visita,local,parametro,momento,iba,linea,momio,momio_decimal,valor_esperado,proyeccion,sugerencia,pick,real,resultado,unidades';
+  const lines = S.picks.map(p=>{ const g=gradePick(p); return [p.date,p.a,p.h,p.metric,`"${p.moment||'Pre'}"`,p.curAtPick??'',p.line,p.odds??'',p.dec??'',p.ev??'',p.proj??'',p.sug??'',p.pick,g.tot??'',g.res,g.units??''].join(','); });
   download('picks_nba_jam.csv', [head,...lines].join('\n'), 'text/csv');
 };
-$('expJson').onclick = () => download('nba_jam_respaldo.json', JSON.stringify({ picks:S.picks, lines:S.lines, hist:S.hist, manual:S.manual }, null, 1), 'application/json');
+$('expJson').onclick = () => download('nba_jam_respaldo.json', JSON.stringify({ picks:S.picks, lines:S.lines, hist:S.hist, odds:S.odds, manual:S.manual }, null, 1), 'application/json');
 $('impBtn').onclick = () => $('impFile').click();
 $('impFile').onchange = async e => {
   const f = e.target.files[0]; if(!f) return;
   try{ const j = JSON.parse(await f.text());
     const seen = new Set(S.picks.map(p=>p.uid||p.created));
     for(const p of j.picks||[]) if(!seen.has(p.uid||p.created)) S.picks.push(p);
-    Object.assign(S.lines, j.lines||{}); Object.assign(S.hist, j.hist||{});
-    store.set('picks',S.picks); store.set('lines',S.lines); store.set('hist',S.hist);
-    if(Sync.on){ S.picks.forEach(p=>Sync.savePick(p)); new Set([...Object.keys(j.lines||{}), ...Object.keys(j.hist||{})]).forEach(k=>Sync.saveLine(k)); }
+    Object.assign(S.lines, j.lines||{}); Object.assign(S.hist, j.hist||{}); Object.assign(S.odds, j.odds||{});
+    store.set('picks',S.picks); store.set('lines',S.lines); store.set('hist',S.hist); store.set('odds',S.odds);
+    if(Sync.on){ S.picks.forEach(p=>Sync.savePick(p)); new Set([...Object.keys(j.lines||{}), ...Object.keys(j.hist||{}), ...Object.keys(j.odds||{})]).forEach(k=>Sync.saveLine(k)); }
     renderPicks();
   }catch{ alert('Archivo no válido'); }
 };
@@ -1145,7 +1207,7 @@ $('themeBtn').onclick = () => {
 
 // auto-refresh en vivo cada 60 s si hay partidos en curso
 setInterval(() => {
-  if(document.activeElement?.classList?.contains('lineIn')) return; // no interrumpir mientras capturas
+  if(['lineIn','oddsIn'].some(c=>document.activeElement?.classList?.contains(c))) return; // no interrumpir mientras capturas
   if(S.live.some(g=>g.state==='in') && $('slateDate').value===etToday()) goDate(etToday());
 }, 60000);
 
@@ -1163,8 +1225,8 @@ window.JAM = {
   },
   setSync(html){ $('syncBox').innerHTML = html; },
   resetUserData(){  // datos personales (no estadísticas): se limpian al cambiar de usuario
-    S.picks = []; S.lines = {}; S.hist = {}; S.manual = [];
-    store.set('picks', []); store.set('lines', {}); store.set('hist', {}); store.set('manual', []);
+    S.picks = []; S.lines = {}; S.hist = {}; S.odds = {}; S.manual = [];
+    store.set('picks', []); store.set('lines', {}); store.set('hist', {}); store.set('odds', {}); store.set('manual', []);
     this.rerender();
   },
 };

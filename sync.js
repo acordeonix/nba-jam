@@ -93,9 +93,9 @@ async function start() {
     Sync.savePick = p => fb.setDoc(P('picks', pickId(p)), clean(p)).catch(fail);
     Sync.deletePick = id => id && fb.deleteDoc(P('picks', id)).catch(fail);
     Sync.saveLine = key => {
-      const line = S.lines[key] ?? null, hist = S.hist[key] || [];
-      if (line == null && !hist.length) return fb.deleteDoc(P('lines', key)).catch(fail);
-      return fb.setDoc(P('lines', key), clean({ line, hist, updated: Date.now() })).catch(fail);
+      const line = S.lines[key] ?? null, hist = S.hist[key] || [], odds = S.odds[key] || null;
+      if (line == null && !hist.length && !odds) return fb.deleteDoc(P('lines', key)).catch(fail);
+      return fb.setDoc(P('lines', key), clean({ line, hist, odds, updated: Date.now() })).catch(fail);
     };
     Sync.saveManual = () => fb.setDoc(P('meta', 'state'), clean({ manual: S.manual }), { merge: true }).catch(fail);
   }
@@ -113,15 +113,17 @@ async function start() {
     for (const p of S.picks) if (!cloudPicks.has(pickId(p))) writes.push(fb.setDoc(P('picks', pickId(p)), clean(p)));
 
     const cloudLines = Object.fromEntries(cl.docs.map(d => [d.id, d.data()]));
-    for (const key of new Set([...Object.keys(S.lines), ...Object.keys(S.hist)])) {
+    for (const key of new Set([...Object.keys(S.lines), ...Object.keys(S.hist), ...Object.keys(S.odds)])) {
       const r = cloudLines[key] || { line: null, hist: [], updated: 0 };
       const lh = S.hist[key] || [];
       const byTs = new Map([...(r.hist || []), ...lh].map(x => [x.ts, x]));
       const hist = [...byTs.values()].sort((a, b) => a.ts - b.ts);
       const localUpd = lh.length ? Math.max(...lh.map(x => x.ts)) : 0;
-      const line = localUpd >= (r.updated || 0) ? (S.lines[key] ?? r.line ?? null) : r.line;
-      if (line !== r.line || hist.length !== (r.hist || []).length)
-        writes.push(fb.setDoc(P('lines', key), clean({ line, hist, updated: Math.max(localUpd, r.updated || 0) })));
+      const localWins = localUpd >= (r.updated || 0);
+      const line = localWins ? (S.lines[key] ?? r.line ?? null) : r.line;
+      const odds = localWins ? (S.odds[key] || r.odds || null) : (r.odds || S.odds[key] || null);
+      if (line !== r.line || hist.length !== (r.hist || []).length || JSON.stringify(odds) !== JSON.stringify(r.odds || null))
+        writes.push(fb.setDoc(P('lines', key), clean({ line, hist, odds, updated: Math.max(localUpd, r.updated || 0) })));
     }
 
     const cloudManual = (cm.exists() && cm.data().manual) || [];
@@ -138,9 +140,10 @@ async function start() {
       store.set('picks', S.picks); J.rerender();
     }, fail));
     unsubs.push(fb.onSnapshot(C('lines'), snap => {
-      const lines = {}, hist = {};
-      for (const d of snap.docs) { const x = d.data(); if (x.line != null) lines[d.id] = x.line; if (x.hist?.length) hist[d.id] = x.hist; }
-      S.lines = lines; S.hist = hist; store.set('lines', lines); store.set('hist', hist); J.rerender();
+      const lines = {}, hist = {}, odds = {};
+      for (const d of snap.docs) { const x = d.data(); if (x.line != null) lines[d.id] = x.line; if (x.hist?.length) hist[d.id] = x.hist; if (x.odds) odds[d.id] = x.odds; }
+      S.lines = lines; S.hist = hist; S.odds = odds;
+      store.set('lines', lines); store.set('hist', hist); store.set('odds', odds); J.rerender();
     }, fail));
     unsubs.push(fb.onSnapshot(P('meta', 'state'), snap => {
       if (!snap.exists()) return;
