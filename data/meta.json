@@ -1,1 +1,34 @@
-{"updated":null,"games":0}
+{
+  "updated": "2026-10-18T02:55:04.920Z",
+  "games": 1235,
+  "last_date": "2026-04-12",
+  "season_types": [
+    2
+  ],
+  "player_seasons": [
+    "2026"
+  ],
+  "player_cols": [
+    "gid",
+    "aid",
+    "team",
+    "st",
+    "min",
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk",
+    "to",
+    "tpm",
+    "tpa",
+    "fgm",
+    "fga",
+    "ftm",
+    "fta",
+    "oreb",
+    "dreb",
+    "pf",
+    "pm"
+  ]
+}
