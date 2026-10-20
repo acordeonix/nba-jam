@@ -2,6 +2,7 @@ name: Actualizar datos NBA
 
 on:
   schedule:
+    # Horas en UTC. 06:20 UTC ≈ 11:20 pm Tijuana: ya terminaron casi todos los partidos.
     - cron: '20 6 * * *'
     - cron: '20 10 * * *'
     - cron: '20 17 * * *'
@@ -28,6 +29,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 340
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,6 +40,7 @@ jobs:
           SEASON_TYPES: ${{ github.event.inputs.tipos || '2' }}
         run: node scripts/update.mjs ${{ github.event.inputs.desde }} ${{ github.event.inputs.hasta }}
       - name: Guardar cambios
+        if: always()   # guarda lo avanzado aunque la descarga haya fallado o se haya cortado
         run: |
           git config user.name "nba-jam-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -46,5 +49,6 @@ jobs:
             echo "Sin cambios"
           else
             git commit -m "datos: $(date -u +%Y-%m-%dT%H:%MZ)"
+            git pull --rebase --autostash || true
             git push
           fi
