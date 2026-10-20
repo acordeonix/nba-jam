@@ -140,6 +140,16 @@ button.mini{min-height:22px;padding:0 6px;font-size:11px}
 .oddsIn{width:62px;min-height:30px;padding:4px 6px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px}
 .oddsIn.bad{border-color:var(--under);color:var(--under)}
 .valrow{padding-top:2px}
+.livepanel{border-top:1px solid var(--line);background:color-mix(in srgb, var(--live) 5%, transparent)}
+.livepanel .proj{border-top:0;margin-top:0;background:none}
+.lp-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 14px;font-size:12.5px;border-top:1px dashed var(--line)}
+.livestrip{border-top:1px solid var(--line);padding:8px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ls-time{flex:1;min-width:160px;font-size:13px}
+.ls-bar{height:6px;border-radius:3px;background:var(--chip);margin-top:6px;overflow:hidden}
+.ls-bar span{display:block;height:100%;background:var(--accent)}
+.ls-q{width:auto;font-size:12.5px} .ls-q th{position:static;cursor:default;padding:2px 6px} .ls-q td{padding:2px 6px;border-bottom:0}
+.pbp .kpis{grid-template-columns:repeat(3,1fr);gap:8px} .pbp .kpi{padding:8px 10px} .pbp .kpi .big{font-size:15px!important}
+.pbp-t{font-size:12.5px;margin-top:6px} .pbp-t td{padding:4px 6px;white-space:normal} .pbp-t tr.scp td:nth-child(2){font-weight:600}
 .det{border-top:1px solid var(--line);padding:8px 14px 12px}
 .det summary{cursor:pointer;font:600 12px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .det table{font-size:12.5px;margin-top:6px} .det th{position:static;cursor:default} .det td,.det th{padding:4px 6px}
@@ -419,10 +429,13 @@ async function loadData(){
       fetch(`${DATA}/meta.json?v=${Date.now()}`).then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(`${DATA}/slate.json?v=${Date.now()}`).then(r=>r.ok?r.json():[]).catch(()=>[]),
     ]);
-    S.games = g; S.meta = m; S.slateFile = sl;
+    // Solo temporada regular NBA: fuera All-Star (equipos STARS/WORLD/…) y final de la Copa NBA
+    const EXCL = new Set(['401809839']);
+    S.games = g.filter(x => TEAMS[norm(x.h.t)] && TEAMS[norm(x.a.t)] && !EXCL.has(x.id) && !x.cup);
+    S.meta = m; S.slateFile = sl;
     $('dataDot').className = 'dot ok';
     const upd = m?.updated ? new Date(m.updated).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}) : '—';
-    $('dataStatus').textContent = `${g.length} partidos · act. ${upd}`;
+    $('dataStatus').textContent = `${S.games.length} partidos · act. ${upd}`;
   }catch(e){
     $('dataDot').className = 'dot bad'; $('dataStatus').textContent = 'No se pudo leer data/games.json';
   }
@@ -448,7 +461,7 @@ async function loadLive(date){
         const st = {}; (c.statistics||[]).forEach(s=>st[s.name]=Number(s.displayValue));
         const q = (c.linescores||[]).map(l=>Number(l.value ?? l.displayValue) || 0);
         st.points = Number(c.score); st.q1 = q.length>=1 ? q[0] : null; st.h1 = q.length>=2 ? q[0]+q[1] : null;
-        return { t:norm(c.team.abbreviation), st, q };
+        return { t:norm(c.team.abbreviation), tid:String(c.team.id ?? ''), st, q };
       };
       return { id:ev.id, date, start:ev.date, type:ev.season?.type, state:ev.status?.type?.state, detail:ev.status?.type?.shortDetail,
         period:ev.status?.period, clock:ev.status?.displayClock, h:side('home'), a:side('away') };
@@ -482,7 +495,11 @@ function liveProject(P, cur, el, seg, line){
   const pace = e>0 ? cur/e*seg : null;
   const sdG = Math.sqrt(((P.H.sd||0)**2 + (P.A.sd||0)**2)/2) * Math.sqrt(seg/48);
   const sdR = sdG * Math.sqrt(rem/seg);
-  const out = { proj, pace, el:e, rem, seg };
+  const out = { proj, pace, el:e, rem, seg, sdR, cur };
+  // Probabilidad de que el total final pase una línea L, dado lo que va del partido
+  out.pAt = L => { L = Number(L); if(cur > L) return 1; if(rem <= 0) return cur > L ? 1 : 0; return sdR>0 ? 1 - phi((L - proj)/sdR) : (proj > L ? 1 : 0); };
+  // Rango donde cae el total final 8 de cada 10 veces (nunca menor a lo ya acumulado)
+  out.lo = Math.max(cur, proj - 1.2816*sdR); out.hi = Math.max(cur, proj + 1.2816*sdR);
   if(line!=null && line!==''){
     const L = Number(line);
     out.diff = proj - L; out.sug = proj>L?'OVER':proj<L?'UNDER':'—';
@@ -556,6 +573,129 @@ function adjNote(P, h, a){
   const ad = P.adj; if(!ad || (!ad.h.list.length && !ad.a.list.length)) return '';
   const part = (t, sd) => sd.list.length ? `${badge(t)} −${fmt(sd.d)} <span class="note">(${sd.list.slice(0,3).map(x=>`${aName(x.aid)} ${fmt(x.contrib)}`).join(', ')}${sd.list.length>3?'…':''})</span>` : '';
   return `<div class="meta adjnote"><span>Bajas (resto recupera ${Math.round(ad.rec*100)}%): ${[part(a,ad.a), part(h,ad.h)].filter(Boolean).join(' · ')}</span></div>`;
+}
+
+// ---------- en vivo: tiempo, cuartos, racha y jugadas ----------
+const CORE = qs.get('core') || 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba';
+// Segundos de juego transcurridos al momento de una jugada (cuartos de 12', tiempos extra de 5')
+const playSec = (period, clockSec) => period <= 4 ? (period-1)*720 + (720 - clockSec) : 2880 + (period-5)*300 + (300 - clockSec);
+async function fetchPlays(gid){
+  try{
+    let page = 1, out = [], pages = 1;
+    do{
+      const j = await fetch(`${CORE}/events/${gid}/competitions/${gid}/plays?limit=1000&page=${page}`).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); });
+      pages = j.pageCount || 1;
+      for(const p of j.items||[]){
+        const tid = (String(p.team?.$ref||'').match(/teams\/(\d+)/)||[])[1] || null;
+        out.push({ text:p.text||'', h:p.homeScore, a:p.awayScore, per:p.period?.number||1, clk:p.clock?.displayValue||'', cs:Number(p.clock?.value)||0,
+          sc:!!p.scoringPlay, v:Number(p.scoreValue)||0, tid, seq:Number(p.sequenceNumber)||0 });
+      }
+      page++;
+    } while(page <= pages && page <= 3);
+    out.sort((x,y)=>x.seq-y.seq);
+    S.plays[gid] = { list: out, ts: Date.now() };
+  }catch(e){ S.plays[gid] = { list: [], ts: Date.now(), err: e.message || 'sin acceso' }; }
+  return S.plays[gid];
+}
+function liveStripHTML(g, db){
+  const hq = db ? db.h.q : g.h.q, aq = db ? db.a.q : g.a.q;
+  if(!(hq && hq.length)) return '';
+  const nP = Math.max(hq.length, aq?.length||0, 4);
+  const lab = i => i<4 ? `Q${i+1}` : `OT${i-3>1?i-3:''}`;
+  const el = elapsedMin(g); const total = Math.max(48, 48 + 5*Math.max(0, (g.period||4)-4));
+  const pct = g.state==='in' && el!=null ? Math.min(100, 100*el/total) : (db||g.state==='post') ? 100 : 0;
+  const sum = q => (q||[]).reduce((s,x)=>s+(x||0),0);
+  return `<div class="livestrip">
+    <div class="ls-time">${g.state==='in' ? `<b>${g.period<=4?'Q'+g.period:'OT'+(g.period-4>1?g.period-4:'')} · ${g.clock||''}</b> <span class="note">${fmt(el,1)}' jugados de ${total}</span>` : `<b>Final</b>`}
+      <div class="ls-bar"><span style="width:${pct}%"></span></div></div>
+    <table class="ls-q"><thead><tr><th></th>${Array.from({length:nP},(_,i)=>`<th class="n">${lab(i)}</th>`).join('')}<th class="n">T</th></tr></thead><tbody>
+      <tr><td>${g.a.t}</td>${Array.from({length:nP},(_,i)=>`<td class="n">${aq?.[i] ?? ''}</td>`).join('')}<td class="n"><b>${sum(aq)}</b></td></tr>
+      <tr><td>${g.h.t}</td>${Array.from({length:nP},(_,i)=>`<td class="n">${hq?.[i] ?? ''}</td>`).join('')}<td class="n"><b>${sum(hq)}</b></td></tr>
+    </tbody></table></div>`;
+}
+function playsAnalysis(g, list){
+  const sc = list.filter(p=>p.sc && p.v>0);
+  if(!sc.length) return null;
+  const side = tid => tid===g.h.tid ? 'h' : tid===g.a.tid ? 'a' : null;
+  // racha: puntos seguidos del último equipo que anotó, sin respuesta del rival
+  const last = side(sc.at(-1).tid); let run = 0, i = sc.length-1;
+  while(i>=0 && side(sc[i].tid)===last){ run += sc[i].v; i--; }
+  const startP = sc[i+1], lastP = list.at(-1);
+  const runDur = Math.max(0, playSec(lastP.per, lastP.cs) - playSec(startP.per, startP.cs));
+  // parcial últimos 5 minutos de juego
+  const now = playSec(lastP.per, lastP.cs), from = now - 300;
+  const p5 = { h:0, a:0 }; for(const p of sc){ if(playSec(p.per,p.cs) > from){ const s2 = side(p.tid); if(s2) p5[s2]+=p.v; } }
+  // racha más grande del partido
+  let best = { pts:0, s:null }, cur = { pts:0, s:null };
+  for(const p of sc){ const s2 = side(p.tid); if(s2===cur.s) cur.pts+=p.v; else cur = { pts:p.v, s:s2 }; if(cur.pts>best.pts) best = { ...cur }; }
+  // serie para la gráfica: ventaja del local
+  const series = list.filter(p=>p.h!=null && p.a!=null).map(p=>({ x: playSec(p.per,p.cs)/60, y: p.h - p.a }));
+  return { run:{ s:last, pts:run, dur:runDur }, p5, best, series, recent: list.filter(p=>p.text).slice(-8).reverse() };
+}
+function marginChart(series, g){
+  if(series.length<2) return '';
+  const W=320,H=90,pl=26,pr=6,pt=6,pb=16;
+  const xm = Math.max(48, Math.ceil(series.at(-1).x)); const ym = Math.max(6, ...series.map(p=>Math.abs(p.y)));
+  const X = x => pl + (W-pl-pr)*x/xm, Y = y => pt + (H-pt-pb)*(1 - (y+ym)/(2*ym));
+  const d = series.map((p,i)=>`${i?'L':'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" class="hchart" role="img" aria-label="Ventaja en el partido">
+    ${[12,24,36,48].map(t=>`<line x1="${X(t)}" x2="${X(t)}" y1="${pt}" y2="${H-pb}" class="gridl"/><text x="${X(t)}" y="${H-4}" text-anchor="middle">${t}'</text>`).join('')}
+    <line x1="${pl}" x2="${W-pr}" y1="${Y(0)}" y2="${Y(0)}" class="prel"/>
+    <text x="${pl-4}" y="${Y(ym)+8}" text-anchor="end">${g.h.t}</text><text x="${pl-4}" y="${Y(-ym)}" text-anchor="end">${g.a.t}</text>
+    <path d="${d}" class="linel"/></svg>`;
+}
+function pbpHTML(g, key){
+  if(g.manual || g.state==='pre') return '';
+  const k = key+'|pbp', o = S.open[k];
+  const head = `<details class="det pbp" data-open="${k}" data-gid="${g.id}" ${o?'open':''}><summary>Racha y jugadas${g.state==='in'?' (en vivo)':''}</summary>`;
+  if(!o) return head + '</details>';
+  const P = S.plays[g.id];
+  if(!P) return head + '<div class="note" style="margin-top:6px">Cargando jugadas…</div></details>';
+  if(P.err) return head + `<div class="note" style="margin-top:6px">ESPN no entregó la jugada por jugada (${P.err}).</div></details>`;
+  const A = playsAnalysis(g, P.list);
+  if(!A) return head + '<div class="note" style="margin-top:6px">Todavía no hay anotaciones.</div></details>';
+  const tn = s => s==='h' ? g.h.t : g.a.t;
+  const mm = sec => `${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,'0')}`;
+  return head + `
+    <div class="kpis" style="margin:8px 0 6px">
+      <div class="kpi"><div class="k">Racha actual</div><div class="big" style="font-size:18px">${badge(tn(A.run.s))} ${A.run.pts}-0</div><div class="note">en ${mm(A.run.dur)} de juego</div></div>
+      <div class="kpi"><div class="k">Últimos 5 min</div><div class="big" style="font-size:18px">${g.a.t} ${A.p5.a} · ${g.h.t} ${A.p5.h}</div></div>
+      <div class="kpi"><div class="k">Mayor racha</div><div class="big" style="font-size:18px">${badge(tn(A.best.s))} ${A.best.pts}-0</div></div>
+    </div>
+    ${marginChart(A.series, g)}
+    <table class="pbp-t"><tbody>${A.recent.map(p=>`<tr class="${p.sc?'scp':''}"><td class="note">${p.per<=4?'Q'+p.per:'OT'} ${p.clk}</td><td>${p.text}</td><td class="n">${p.a}-${p.h}</td></tr>`).join('')}</tbody></table>
+    <div class="note">Marcador visita-local. ${g.state==='in'?'Se actualiza cada minuto mientras esté abierto.':''}</div></details>`;
+}
+
+// ---------- panel en vivo ----------
+function livePanelHTML(LV, m, line, g, key){
+  const pct = x => x==null ? '—' : x >= 0.995 ? '99%+' : x <= 0.005 ? '<1%' : Math.round(x*100)+'%';
+  const segTxt = LV.seg===48 ? 'partido' : LV.seg===24 ? '1a mitad' : '1er cuarto';
+  const fair = Math.floor(LV.proj) + 0.5; // línea con .5 más cercana a la proyección (la que deja ~50/50)
+  const L = line===''?null:Number(line);
+  let vsLine = '';
+  if(L!=null && LV.rem <= 0){
+    vsLine = `<div class="lp-row"><span class="k">Contra ${fmt(L)}</span><span class="pill ${LV.cur>L?'over':'under'}">${LV.cur>L?'OVER':LV.cur<L?'UNDER':'PUSH'}</span></div>`;
+  } else if(L!=null){
+    const pO = LV.pAt(L), need = Math.floor(L) + 1 - LV.cur;
+    const reqPace = LV.rem>0 && need>0 ? need/LV.rem*LV.seg : null;
+    vsLine = `<div class="lp-row"><span class="k">Contra ${fmt(L)}</span>
+      <span class="pill over">OVER ${pct(pO)}</span><span class="pill under">UNDER ${pct(1-pO)}</span>
+      <span class="note">${need<=0 ? '<b style="color:var(--over)">ya pasó la línea</b>' : `faltan <b>${need}</b> en ${fmt(LV.rem,1)}' · ritmo necesario <b>${fmt(reqPace)}</b> vs actual <b>${fmt(LV.pace)}</b>`}</span></div>`;
+  }
+  const myPicks = S.picks.filter(p=>p.id===g.id && p.metric===S.metric);
+  const picksTxt = myPicks.length ? `<div class="lp-row"><span class="k">Tus picks</span>${myPicks.map(p=>{ const pO = LV.pAt(p.line), pw = p.pick==='OVER' ? pO : 1-pO;
+      return `<span class="pill ${p.pick==='OVER'?'over':'under'}">${p.pick} ${fmt(p.line)}${p.phase==='vivo'?' (vivo)':''}: ${pct(pw)} de acertar</span>`; }).join(' ')}</div>` : '';
+  return `<div class="livepanel">
+    <div class="proj liveproj">
+      <div><div class="k">Acumulado · ${m.label.toLowerCase()}</div><div class="big">${LV.cur}</div></div>
+      <div><div class="k">Tiempo (${segTxt})</div><div class="big" style="font-size:16px">${fmt(LV.el,1)}' / ${LV.seg}'</div><div class="ls-bar"><span style="width:${Math.min(100,100*LV.el/LV.seg)}%"></span></div></div>
+      <div><div class="k">Proy. final</div><div class="big">${fmt(LV.proj)}</div></div>
+    </div>
+    ${LV.rem <= 0 ? `<div class="lp-row"><span class="k">Terminado</span><span>${LV.seg===24?'la':'el'} ${segTxt} terminó con <b>${LV.cur}</b></span></div>`
+      : `<div class="lp-row"><span class="k">Se ajusta mejor</span><span>línea justa ahora <b>${fmt(fair)}</b> · rango probable (8 de 10) <b>${fmt(LV.lo,0)}–${fmt(LV.hi,0)}</b> · ritmo actual <b>${fmt(LV.pace)}</b> por ${LV.seg}'</span></div>`}
+    ${vsLine}${picksTxt}
+  </div>`;
 }
 
 // ---------- momios ----------
@@ -647,12 +787,9 @@ function renderCardsInner(){
         <div><div class="k">Proy. ${a} · ${h}</div><div class="big" style="font-size:15px;white-space:nowrap">${fmt(P.aProj)} · ${fmt(P.hProj)}</div></div>
         <div><div class="k">${g.state==='in'?'Actual':'Real'}</div><div class="big" ${curCls}>${cur!=null?cur:'—'}</div></div>
       </div>
+      ${(g.state==='in' || g.state==='post' || db) && !g.manual ? liveStripHTML(g, db) : ''}
       ${adjNote(P, h, a)}
-      ${LV ? `<div class="proj liveproj">
-        <div><div class="k">Proy. en vivo</div><div class="big">${fmt(LV.proj)}</div></div>
-        <div><div class="k">Ritmo actual</div><div class="big" style="font-size:15px">${fmt(LV.pace)}</div></div>
-        <div><div class="k">Minutos</div><div class="big" style="font-size:15px">${fmt(LV.el,0)} / ${seg}</div></div>
-      </div>` : (g.state==='in' && !m.live ? `<div class="meta" style="padding-top:8px">ESPN no da ${m.label.toLowerCase()} en vivo en el marcador; la proyección es la previa.</div>` : '')}
+ ${LV ? livePanelHTML(LV, m, line, g, key) : (g.state==='in' && !m.live ? `<div class="meta" style="padding-top:8px">ESPN no da ${m.label.toLowerCase()} en vivo en el marcador; la proyección es la previa.</div>` : '')}
       <div class="lineRow">
         <span class="k">${g.state==='in'?'Línea en vivo':'Línea'}</span><input type="number" step="0.5" class="lineIn" value="${line}" placeholder="—" data-moment="${momentLabel(g)}" data-min="${el??0}">
         ${sugPill}
@@ -668,7 +805,7 @@ function renderCardsInner(){
       ${E.sug ? valueHTML(E, key) : ''}
       ${E.sug ? `<div class="meta">
         <span>Prob. over aprox <b>${E.pOver!=null?Math.round(E.pOver*100)+'%':'—'}</b></span>
-        ${LV ? `<span>Faltan <b>${fmt(LV.rem,1)}'</b> · ${(cur??0) > Number(line) ? '<b style="color:var(--over)">ya pasó la línea</b>' : `necesita <b>${fmt(Math.floor(Number(line)) + 1 - (cur??0),0)}</b> más para over`}</span>` : `
+        ${LV ? '' : `
         <span>${a} pasó la línea <b>${P.aOver!=null?Math.round(P.aOver*100)+'%':'—'}</b> (${P.aN})</span>
         <span>${h} <b>${P.hOver!=null?Math.round(P.hOver*100)+'%':'—'}</b> (${P.hN})</span>`}
       </div>`:''}
@@ -678,6 +815,7 @@ function renderCardsInner(){
         <table class="htab"><thead><tr><th>Momento</th><th class="n">Línea</th><th class="n">Actual</th><th class="n">Proy.</th><th class="n">P(over)</th><th class="n">Momio O/U</th><th></th></tr></thead><tbody>
         ${hist.map((x,i)=>`<tr><td>${x.label}</td><td class="n">${fmt(x.line)}</td><td class="n">${x.cur??'—'}</td><td class="n">${fmt(x.proj)}</td><td class="n">${x.pOver!=null?Math.round(x.pOver*100)+'%':'—'}</td><td class="n">${x.oO||x.oU?`${x.oO||'—'} / ${x.oU||'—'}`:'—'}</td><td><button data-hdel="${i}" class="mini">✕</button></td></tr>`).join('')}
         </tbody></table></details>` : ''}
+      ${pbpHTML(g, key)}
       ${h2hHTML(g, key, line, S.asOf)}
       ${lineupHTML(g, key)}
     </article>`;
@@ -732,6 +870,9 @@ $('cards').addEventListener('toggle', async e => {
   if(d.classList.contains('hist')){ (S.openHist ||= {})[d.dataset.key] = d.open; return; }
   const k = d.dataset.open; if(!k) return;
   const was = !!S.open[k]; S.open[k] = d.open;
+  if(d.classList.contains('pbp') && d.open && !was){
+    await fetchPlays(d.dataset.gid); renderCards(); return;
+  }
   if(d.classList.contains('lu') && d.open && !was){
     const gid = d.dataset.gid, lv = S.live.find(x=>x.id===gid);
     await Promise.all([ loadPlayers(S.season), lv && lv.state!=='post' && !S.sum[gid] ? fetchSummary(gid) : null ]);
@@ -881,7 +1022,7 @@ $('impFile').onchange = async e => {
 const PC = { gid:0, aid:1, team:2, st:3, min:4, pts:5, reb:6, ast:7, stl:8, blk:9, to:10, tpm:11, tpa:12, fgm:13, fga:14, ftm:15, fta:16, oreb:17, dreb:18, pf:19, pm:20 };
 const PSTATS = [['pts','PTS'],['reb','REB'],['ast','AST'],['tpm','3PM'],['stl','STL'],['blk','BLK'],['to','TO']];
 const pval = (r, k) => k==='pra' ? r[PC.pts]+r[PC.reb]+r[PC.ast] : k==='pr' ? r[PC.pts]+r[PC.reb] : k==='pa' ? r[PC.pts]+r[PC.ast] : k==='ra' ? r[PC.reb]+r[PC.ast] : r[PC[k]];
-S.pl = {}; S.ath = null; S.sum = {}; S.open = {};
+S.pl = {}; S.ath = null; S.sum = {}; S.open = {}; S.plays = {};
 let gIndex = null;
 function gameIndex(){ if(!gIndex || gIndex.n!==S.games.length){ gIndex = { n:S.games.length, m:new Map(S.games.map(g=>[g.id,g])) }; } return gIndex.m; }
 async function loadAthletes(){
@@ -1191,6 +1332,8 @@ function renderAll(){
 async function goDate(d){
   $('slateDate').value = d; await loadLive(d);
   const openLu = Object.keys(S.open).filter(k=>S.open[k] && k.endsWith('|lu')).map(k=>k.split('|')[0]);
+  const openPbp = Object.keys(S.open).filter(k=>S.open[k] && k.endsWith('|pbp')).map(k=>k.split('|')[0]);
+  await Promise.all(S.live.filter(g=>g.state==='in' && openPbp.includes(g.id)).map(g=>fetchPlays(g.id)));
   const needAdj = S.adj!=='off';
   const stale = g => !S.sum[g.id] || g.state==='in' || Date.now()-S.sum[g.id].ts > 10*60e3;
   await Promise.all([

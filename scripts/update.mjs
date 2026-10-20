@@ -21,14 +21,25 @@ const ATHLETES_JSON = path.join(DATA, 'athletes.json');  // catálogo id -> [nom
 const BASE = process.env.ESPN_BASE || 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
 const START_DATE = process.env.START_DATE || '2026-10-20'; // arranque temporada regular 2026-27
 const SEASON_TYPES = (process.env.SEASON_TYPES || '2').split(',').map(s => Number(s.trim()));
-const DELAY_MS = Number(process.env.DELAY_MS || 250);
+const DELAY_MS = Number(process.env.DELAY_MS || 100);
+const CONCURRENCY = Number(process.env.CONCURRENCY || 4);      // partidos que se bajan a la vez
+const MAX_MINUTES = Number(process.env.MAX_MINUTES || 300);     // corta a tiempo y guarda lo avanzado
+const SAVE_EVERY_DAYS = 10;                                      // guarda progreso cada N días procesados
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Solo los 30 equipos NBA: deja fuera el All-Star (STARS, WORLD, STRIPES…) y exhibiciones
+const NBA = new Set(['ATL','BOS','BKN','CHA','CHI','CLE','DAL','DEN','DET','GS','HOU','IND','LAC','LAL','MEM','MIA','MIL','MIN','NO','NY','OKC','ORL','PHI','PHX','POR','SAC','SA','TOR','UTAH','WSH']);
+// La final de la Copa NBA no cuenta en las estadísticas oficiales de temporada regular
+const isCupFinal = ev => ev.competitions?.[0]?.type?.abbreviation === 'CC' ||
+  (ev.competitions?.[0]?.notes || []).some(n => /cup championship/i.test(n.headline || ''));
+const EXCLUDE_IDS = new Set(['401809839']); // final Copa NBA 2025 (ya guardada antes del filtro)
+const isNbaEvent = ev => (ev.competitions?.[0]?.competitors || []).every(c => NBA.has(c.team?.abbreviation)) && !isCupFinal(ev) && !EXCLUDE_IDS.has(ev.id);
 
 async function getJSON(url, tries = 3) {
   for (let i = 1; i <= tries; i++) {
     try {
-      const res = await fetch(url, { headers: { 'user-agent': 'nba-jam-tracker/1.0' } });
+      const res = await fetch(url, { headers: { 'user-agent': 'nba-jam-tracker/1.0' }, signal: AbortSignal.timeout(20000) }); // máx. 20 s por petición
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (e) {
@@ -178,7 +189,11 @@ function toCSV(games) {
 
 async function main() {
   await fs.mkdir(DATA, { recursive: true });
-  const games = await load(GAMES_JSON, []);
+  const games0 = await load(GAMES_JSON, []);
+  // Limpia lo que no es temporada regular NBA (All-Star, final de Copa) si quedó de cargas anteriores
+  const games = games0.filter(g => NBA.has(g.h.t) && NBA.has(g.a.t) && !EXCLUDE_IDS.has(g.id) && !g.cup);
+  const dropped = new Set(games0.filter(g => !games.includes(g)).map(g => g.id));
+  if (dropped.size) console.log(`Limpieza: ${dropped.size} partidos fuera de la temporada regular NBA`);
   const have = new Set(games.map(g => g.id));
   await fs.mkdir(PLAYERS_DIR, { recursive: true });
   const athletes = await load(ATHLETES_JSON, {});
@@ -187,7 +202,8 @@ async function main() {
   for (const f of await fs.readdir(PLAYERS_DIR)) {
     if (!f.endsWith('.json')) continue;
     const season = f.replace('.json', '');
-    pSeasons[season] = await load(path.join(PLAYERS_DIR, f), []);
+    pSeasons[season] = (await load(path.join(PLAYERS_DIR, f), [])).filter(r => !dropped.has(r[0]) && NBA.has(r[2]));
+    if (dropped.size) pDirty.add(season);
     for (const r of pSeasons[season]) havePlayers.add(r[0]);
   }
   const addPlayers = (season, rows) => {
@@ -205,30 +221,54 @@ async function main() {
   to = to || today;
   if (from > to) { console.log(`Nada que hacer: ${from} > ${to}`); }
 
-  let added = 0;
-  for (let d = from; d <= to; d = addDays(d, 1)) {
-    const sb = await getJSON(`${BASE}/scoreboard?dates=${ymd(d)}&limit=50`);
-    const events = sb.events || [];
-    for (const ev of events) {
-      const done = ev.status?.type?.completed;
-      const type = ev.season?.type;
-      if (!done || !SEASON_TYPES.includes(type)) continue;
-      if (have.has(ev.id) && havePlayers.has(ev.id)) continue;
-      await sleep(DELAY_MS);
+  const t0 = Date.now();
+  let added = 0, failed = 0, days = 0, stoppedAt = null;
+
+  // Guarda todo lo avanzado (se llama cada N días y al final)
+  async function save(slate) {
+    games.sort((x, y) => (x.date + x.id).localeCompare(y.date + y.id));
+    for (const season of pDirty) {
+      const ids = new Set(); // dedupe por (juego, jugador)
+      const rows = pSeasons[season].filter(r => { const k = r[0] + '|' + r[1]; if (ids.has(k)) return false; ids.add(k); return true; });
+      pSeasons[season] = rows;
+      await fs.writeFile(path.join(PLAYERS_DIR, `${season}.json`), '[\n' + rows.map(r => JSON.stringify(r)).join(',\n') + '\n]');
+    }
+    await fs.writeFile(ATHLETES_JSON, JSON.stringify(athletes));
+    await fs.writeFile(GAMES_JSON, JSON.stringify(games));
+    await fs.writeFile(GAMES_CSV, toCSV(games));
+    if (slate) await fs.writeFile(SLATE_JSON, JSON.stringify(slate));
+    await fs.writeFile(META_JSON, JSON.stringify({ updated: new Date().toISOString(), games: games.length, last_date: games.at(-1)?.date ?? null, season_types: SEASON_TYPES,
+      player_seasons: Object.keys(pSeasons).filter(k => pSeasons[k].length).sort(), player_cols: P_COLS }, null, 2));
+  }
+
+  async function processEvent(ev, d) {
+    try {
       const summary = await getJSON(`${BASE}/summary?event=${ev.id}`);
       const season = ev.season?.year ?? 'na';
       const prow = parsePlayers(ev.id, summary, athletes);
       addPlayers(season, prow); havePlayers.add(ev.id);
-      if (have.has(ev.id)) { console.log(`  jugadores ${d} ${ev.id} (${prow.length})`); continue; }
+      if (have.has(ev.id)) { console.log(`  jugadores ${d} ${ev.id} (${prow.length})`); return; }
       const g = parseGame(ev, summary);
       g.date = d;
       games.push(g); have.add(ev.id); added++;
       console.log(`+ ${d} ${g.a.t} ${g.a.pts} @ ${g.h.t} ${g.h.pts}  (AST ${g.a.ast}+${g.h.ast}) · ${prow.length} jugadores`);
+    } catch (e) {
+      failed++; console.warn(`! ${d} ${ev.id} no se pudo bajar (${e.message}); se reintenta en la próxima corrida`);
     }
-    await sleep(DELAY_MS);
   }
 
-  games.sort((x, y) => (x.date + x.id).localeCompare(y.date + y.id));
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    if ((Date.now() - t0) / 60000 > MAX_MINUTES) { stoppedAt = d; break; }
+    let events = [];
+    try { events = (await getJSON(`${BASE}/scoreboard?dates=${ymd(d)}&limit=50`)).events || []; }
+    catch (e) { console.warn(`! ${d} calendario no disponible (${e.message})`); failed++; continue; }
+    const todo = events.filter(ev => ev.status?.type?.completed && SEASON_TYPES.includes(ev.season?.type) && isNbaEvent(ev) && !(have.has(ev.id) && havePlayers.has(ev.id)));
+    for (let i = 0; i < todo.length; i += CONCURRENCY) {
+      await Promise.all(todo.slice(i, i + CONCURRENCY).map(ev => processEvent(ev, d)));
+      await sleep(DELAY_MS);
+    }
+    if (++days % SAVE_EVERY_DAYS === 0) { await save(); console.log(`· progreso guardado hasta ${d} (${games.length} partidos)`); }
+  }
 
   // Calendario próximo (hoy y mañana) como respaldo si el navegador no puede llamar a ESPN
   const slate = [];
@@ -249,18 +289,9 @@ async function main() {
     } catch (e) { console.warn('slate', d, e.message); }
   }
 
-  for (const season of pDirty) {
-    const ids = new Set(); // dedupe por (juego, jugador)
-    const rows = pSeasons[season].filter(r => { const k = r[0] + '|' + r[1]; if (ids.has(k)) return false; ids.add(k); return true; });
-    await fs.writeFile(path.join(PLAYERS_DIR, `${season}.json`), '[\n' + rows.map(r => JSON.stringify(r)).join(',\n') + '\n]');
-  }
-  await fs.writeFile(ATHLETES_JSON, JSON.stringify(athletes));
-  await fs.writeFile(GAMES_JSON, JSON.stringify(games));
-  await fs.writeFile(GAMES_CSV, toCSV(games));
-  await fs.writeFile(SLATE_JSON, JSON.stringify(slate));
-  await fs.writeFile(META_JSON, JSON.stringify({ updated: new Date().toISOString(), games: games.length, last_date: games.at(-1)?.date ?? null, season_types: SEASON_TYPES,
-    player_seasons: Object.keys(pSeasons).filter(k => pSeasons[k].length).sort(), player_cols: P_COLS }, null, 2));
-  console.log(`Listo: ${added} partidos nuevos, ${games.length} en total.`);
+  await save(slate);
+  console.log(`Listo: ${added} partidos nuevos, ${games.length} en total${failed ? `, ${failed} pendientes por error` : ''}.`);
+  if (stoppedAt) console.log(`Se cortó por tiempo en ${stoppedAt}. Vuelve a correr el mismo rango: lo ya guardado se salta solo.`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });
