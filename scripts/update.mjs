@@ -14,6 +14,7 @@ const DATA = path.join(ROOT, 'data');
 const GAMES_JSON = path.join(DATA, 'games.json');
 const GAMES_CSV = path.join(DATA, 'games.csv');
 const SLATE_JSON = path.join(DATA, 'slate.json');
+const ROSTERS_JSON = path.join(DATA, 'rosters.json');   // rosters actuales: equipo -> jugadores
 const META_JSON = path.join(DATA, 'meta.json');
 const PLAYERS_DIR = path.join(DATA, 'players');          // data/players/<season>.json
 const ATHLETES_JSON = path.join(DATA, 'athletes.json');  // catálogo id -> [nombre, nombre corto, posición, número]
@@ -105,6 +106,9 @@ function parseGame(event, summary) {
     const q = (c.linescores || []).map(l => num(l.value ?? l.displayValue) ?? 0);
     return { t: abbr, pts: num(c.score), q, ...(box ? parseTeamStats(box) : {}) };
   };
+  // Línea del mercado (DraftKings vía ESPN): total de puntos y spread del local
+  const pc = (summary?.pickcenter || [])[0] || comp.odds?.[0] || null;
+  const mk = pc && num(pc.overUnder) != null ? { ou: num(pc.overUnder), sp: num(pc.spread), p: pc.provider?.name || '', det: pc.details || '' } : undefined;
   return {
     id: event.id,
     date: null, // se asigna con la fecha ET consultada
@@ -112,6 +116,7 @@ function parseGame(event, summary) {
     type: event.season?.type ?? null,
     h: build('home'),
     a: build('away'),
+    ...(mk ? { mk } : {}),
   };
 }
 
@@ -277,17 +282,48 @@ async function main() {
       const sb = await getJSON(`${BASE}/scoreboard?dates=${ymd(d)}&limit=50`);
       for (const ev of sb.events || []) {
         const c = ev.competitions[0].competitors;
-        let inj = {};
-        try { await sleep(DELAY_MS); inj = parseInjuries(await getJSON(`${BASE}/summary?event=${ev.id}`), athletes); } catch {}
+        let inj = {}, mk;
+        try {
+          await sleep(DELAY_MS); const sm = await getJSON(`${BASE}/summary?event=${ev.id}`);
+          inj = parseInjuries(sm, athletes);
+          const pc = (sm.pickcenter || [])[0] || ev.competitions[0].odds?.[0];
+          if (pc && num(pc.overUnder) != null) mk = { ou: num(pc.overUnder), sp: num(pc.spread), p: pc.provider?.name || '', det: pc.details || '' };
+        } catch {}
         slate.push({
           id: ev.id, date: d, start: ev.date, type: ev.season?.type,
           h: c.find(x => x.homeAway === 'home').team.abbreviation,
           a: c.find(x => x.homeAway === 'away').team.abbreviation,
-          inj,
+          inj, ...(mk ? { mk } : {}),
         });
       }
     } catch (e) { console.warn('slate', d, e.message); }
   }
+
+  // Rosters actuales de los 30 equipos (traspasos, agentes libres, novatos)
+  try {
+    const prev = await load(ROSTERS_JSON, { teams: {} });
+    const tj = await getJSON(`${BASE}/teams`);
+    const list = (tj.sports?.[0]?.leagues?.[0]?.teams || []).map(x => x.team).filter(t => NBA.has(t.abbreviation));
+    const teams = { ...prev.teams };
+    let season = prev.season ?? null, ok = 0;
+    for (const t of list) {
+      try {
+        await sleep(DELAY_MS);
+        const r = await getJSON(`${BASE}/teams/${t.id}/roster`);
+        season = r.season?.year ?? season;
+        teams[t.abbreviation] = (r.athletes || []).map(a => {
+          athletes[a.id] = [a.displayName, a.shortName || athletes[a.id]?.[1] || '', a.position?.abbreviation || athletes[a.id]?.[2] || '', a.jersey || athletes[a.id]?.[3] || ''];
+          const inj = a.injuries?.[0]?.status || '';
+          return [String(a.id), inj];
+        });
+        ok++;
+      } catch (e) { console.warn(`roster ${t.abbreviation}: ${e.message}`); }
+    }
+    if (ok) {
+      await fs.writeFile(ROSTERS_JSON, JSON.stringify({ updated: new Date().toISOString(), season, season_start: season ? `${season - 1}-10-01` : null, teams }));
+      console.log(`Rosters: ${ok}/30 equipos actualizados (temporada ${season})`);
+    }
+  } catch (e) { console.warn('rosters', e.message); }
 
   await save(slate);
   console.log(`Listo: ${added} partidos nuevos, ${games.length} en total${failed ? `, ${failed} pendientes por error` : ''}.`);
