@@ -221,7 +221,23 @@ async function start() {
       <form class="adm-add" data-a="add"><input type="email" required placeholder="correo@gmail.com" id="admEmail"><button class="primary">Agregar</button></form>
       <p class="note">Agrega la cuenta de Google con la que entrará. Al quitar a alguien deja de sincronizar de inmediato; sus datos se conservan por si lo vuelves a aprobar.</p>
     </div>`;
-    dlg.querySelector('form').onsubmit = async ev => { ev.preventDefault(); await setAllowed(a => [...a, dlg.querySelector('#admEmail').value]); };
+    dlg.querySelector('form').onsubmit = async ev => {
+      ev.preventDefault();
+      const inp = dlg.querySelector('#admEmail'), btn = ev.target.querySelector('button');
+      const email = inp.value.trim().toLowerCase();
+      if (!email) return;
+      btn.disabled = true; btn.textContent = 'Agregando…';
+      try {
+        await setAllowed(a => [...a, email]);
+        // si esa persona ya había pedido acceso, se quita de pendientes
+        const pend = reqs.find(r => String(r.email).toLowerCase() === email);
+        if (pend) await fb.deleteDoc(fb.doc(db, 'requests', pend.uid)).catch(() => {});
+        await renderAdmin();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = 'Agregar';
+        alert('No se pudo agregar: ' + err.message);
+      }
+    };
   }
   async function setAllowed(fn) {
     const ref = fb.doc(db, 'config', 'access');
