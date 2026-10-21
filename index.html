@@ -172,6 +172,7 @@ button.mini{min-height:22px;padding:0 6px;font-size:11px}
 tr.out td{opacity:.45;text-decoration:line-through}
 .st{font:700 10px Barlow,sans-serif;color:var(--accent)}
 .sumrow td{border-top:2px solid var(--line);font-weight:600}
+.sumrow2 td{font-weight:600;color:var(--muted)}
 .today{color:var(--live);font-weight:600}
 .rk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px}
 .rk-col{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
@@ -1857,11 +1858,25 @@ function lineupHTML(g, key){
     for(const x of pp?.list || []) if(x.emin >= 1 && !rot.find(r=>r.aid===x.aid)) rot.push({ aid:x.aid, L:(PL.by[x.aid]||[]).filter(o=>!asOf||o.date<asOf), tl:[], lastStarter:false, min:x.min });
     const rows = rot.slice(0, 16);
     let sumAvail = 0;
+    // sumas de las columnas (solo los que juegan: sin "Out"; si ya hay alineación real, solo los que jugaron)
+    const Z = { n:0, min:0, pts:0, reb:0, ast:0, tpm:0, l5p:0, l5r:0, l5a:0, emin:0, proj:0, tp:0, tr:0, ta:0, tm:0,
+                hp:0, hr:0, ha:0, h3:0 };
     const body = rows.map(r => {
       const W = playerWindow(r.L), L5 = r.L.slice(-5);
       const st = inj[r.aid] || '', out = isOut(st) && !(actual && actual[r.aid]);
       const av = pAvg(W, statKey); if(!out && av!=null && (!actual || actual[r.aid])) sumAvail += av;
       const t = actual?.[r.aid];
+      if(!out && (!actual || t)){
+        const add = (k, v) => { if(v!=null && !Number.isNaN(v)) Z[k] += v; };
+        if(W.length) Z.n++;
+        add('min', pAvg(W,'min')); add('pts', pAvg(W,'pts')); add('reb', pAvg(W,'reb')); add('ast', pAvg(W,'ast')); add('tpm', pAvg(W,'tpm'));
+        add('l5p', pAvg(L5,'pts')); add('l5r', pAvg(L5,'reb')); add('l5a', pAvg(L5,'ast'));
+        const e = ppBy[r.aid]; if(e && e.emin >= 1){ add('emin', e.emin); add('proj', e.proj);
+          // lo que daría con los minutos de hoy: su producción por minuto × MIN est.
+          const Wm = W.filter(o => o.r[PC.min] > 0), mins = Wm.reduce((x,o)=>x+o.r[PC.min],0);
+          if(mins){ for(const [k, z] of [['pts','hp'],['reb','hr'],['ast','ha'],['tpm','h3']]) Z[z] += Wm.reduce((x,o)=>x+(pval(o.r,k)||0),0)/mins*e.emin; } }
+        if(t){ add('tp', Number(t.pts)); add('tr', Number(t.reb)); add('ta', Number(t.ast)); add('tm', Number(t.min)); }
+      }
       return `<tr class="${out?'out':''}"><td>${starterOf(r)?'<span class="st">T</span>':''}</td><td>${aName(r.aid)} <span class="note">${aPos(r.aid)}</span> ${st?`<span class="inj ${isOut(st)?'':'dtd'}">${st}</span>`:''}</td>
         <td class="n">${W.length||'—'}</td><td class="n">${fmt(pAvg(W,'min'),0)}</td><td class="n">${fmt(pAvg(W,'pts'))}</td><td class="n">${fmt(pAvg(W,'reb'))}</td><td class="n">${fmt(pAvg(W,'ast'))}</td><td class="n">${fmt(pAvg(W,'tpm'))}</td>
         <td class="n note">${L5.length?`${fmt(pAvg(L5,'pts'),0)}/${fmt(pAvg(L5,'reb'),0)}/${fmt(pAvg(L5,'ast'),0)}`:'—'}</td>
@@ -1871,12 +1886,18 @@ function lineupHTML(g, key){
     const T = teamStats(team, null, statKey); // promedio de equipo (respeta ventana)
     return `<div class="lu-team">${badge(team)} ${tname(team)} <span class="note">${side}${actual?(fromDB?' · alineación real':' · alineación en vivo'):' · titulares probables (último juego)'}</span></div>
       <div style="overflow-x:auto"><table><thead><tr><th></th><th>Jugador</th><th class="n">GP</th><th class="n">MIN</th><th class="n">PTS</th><th class="n">REB</th><th class="n">AST</th><th class="n">3PM</th><th class="n">L5 P/R/A</th><th class="n est" title="Minutos estimados para hoy">MIN est.</th><th class="n est" title="Parte de la proyección del equipo que le toca a este jugador">Proy. ${(PSTAT[S.metric]||'pts').toUpperCase()}</th>${actual?`<th class="n">${fromDB?'Ese juego':'Hoy'} P/R/A</th>`:''}</tr></thead>
-      <tbody>${body}<tr class="sumrow"><td></td><td colspan="${actual?11:10}">${statLbl}: promedio del equipo <b>${fmt(T.f)}</b>
+      <tbody>${body}
+      <tr class="sumrow"><td></td><td>Suma <span class="note">(${Z.n} jugadores)</span></td><td></td><td class="n">${fmt(Z.min,0)}</td><td class="n">${fmt(Z.pts)}</td><td class="n">${fmt(Z.reb)}</td><td class="n">${fmt(Z.ast)}</td><td class="n">${fmt(Z.tpm)}</td>
+        <td class="n note">${fmt(Z.l5p,0)}/${fmt(Z.l5r,0)}/${fmt(Z.l5a,0)}</td><td class="n est">${Z.emin?fmt(Z.emin,0):'—'}</td><td class="n est">${Z.proj?fmt(Z.proj):'—'}</td>
+        ${actual?`<td class="n today">${fmt(Z.tp,0)}/${fmt(Z.tr,0)}/${fmt(Z.ta,0)} <span class="note">${Math.round(Z.tm)}'</span></td>`:''}</tr>
+      ${Z.emin ? `<tr class="sumrow2"><td></td><td>Con los minutos de hoy <span class="note">(${fmt(Z.emin,0)}')</span></td><td></td><td></td><td class="n">${fmt(Z.hp)}</td><td class="n">${fmt(Z.hr)}</td><td class="n">${fmt(Z.ha)}</td><td class="n">${fmt(Z.h3)}</td><td colspan="${actual?4:3}"></td></tr>` : ''}
+      <tr class="sumrow"><td></td><td colspan="${actual?11:10}">${statLbl}: promedio del equipo <b>${fmt(T.f)}</b>
         ${pp ? ` · proyección por jugadores: <b>${fmt(pp.f)}</b> <span class="note">(${pp.n} jugadores · índice de alineación <b>${pp.q.toFixed(2)}</b>${pp.q>=1.005?' más fuerte':pp.q<=0.995?' más débil':''} que la habitual → ${sgn((pp.qq-1)*100,1)}%${pp.fill>=1?` · ${fmt(pp.fill,0)}' para suplentes sin datos`:''})</span>` : ''}</td></tr></tbody></table></div>`;
   };
   return head + teamBlock(g.a.t,'visita') + teamBlock(g.h.t,'local') +
     `<div class="note" style="margin-top:6px">Promedios ${Number(S.win)?'últimos '+S.win+' juegos':'de temporada'} antes de esta fecha. T = titular. Los "Out" no cuentan.
-      <b>MIN est.</b> = sus minutos promedio; titulares y los 3 siguientes los conservan y al resto se le reparte lo que falte para 240. <b>Índice de alineación</b>: cuánto produce cada jugador comparado con el promedio de su equipo, por los minutos que va a jugar; 1.00 = la alineación de siempre. La proyección del equipo (a favor y en contra del rival) se mueve 60% de esa diferencia. <b>Proy.</b> = la parte de cada jugador en esa proyección.</div></details>`;
+      <b>MIN est.</b> = sus minutos promedio; titulares y los 3 siguientes los conservan y al resto se le reparte lo que falte para 240. <b>Índice de alineación</b>: cuánto produce cada jugador comparado con el promedio de su equipo, por los minutos que va a jugar; 1.00 = la alineación de siempre. La proyección del equipo (a favor y en contra del rival) se mueve 60% de esa diferencia. <b>Proy.</b> = la parte de cada jugador en esa proyección.
+      <b>Suma</b>: total de cada columna de los que juegan; los promedios suman de más porque cada jugador cuenta sus minutos completos (la suma de MIN pasa de 240). <b>Con los minutos de hoy</b>: lo que darían juntos si cada uno produce a su ritmo por minuto en sus MIN est. (equipo de 240 minutos), antes de ajustar por rival.</div></details>`;
 }
 
 // ---------- render: jugadores ----------
