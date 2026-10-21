@@ -216,8 +216,6 @@ tr.click{cursor:pointer}
         <select id="win"><option value="0">Toda la temporada</option><option value="20">Últimos 20</option><option value="10">Últimos 10</option><option value="5">Últimos 5</option></select></div>
       <div class="ctl"><label for="split">Local / visita</label>
         <select id="split"><option value="all">Todos los juegos</option><option value="ha">Split: local en casa, visita fuera</option></select></div>
-      <div class="ctl"><label for="adj">Ajuste plantilla y bajas</label>
-        <select id="adj"><option value="off">Sin ajuste</option><option value="0.25">Resto recupera 25%</option><option value="0.5">Resto recupera 50%</option><option value="0.75">Resto recupera 75%</option></select></div>
       <div class="ctl"><label for="model">Modelo</label>
         <select id="model"><option value="avg">Promedios (tu hoja)</option><option value="pace">Ritmo × eficiencia</option><option value="players">Jugadores (alineación)</option><option value="mix">Mixto: promedios + jugadores</option></select></div>
       <div class="ctl"><label for="rest">Descanso</label>
@@ -437,7 +435,7 @@ const store = {
 // ---------- estado ----------
 const S = {
   games: [], meta: null, slateFile: [],
-  metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: store.get('adj','0.5'), model: store.get('model','avg'), rest: store.get('rest','on'), stake: store.get('stake', 100),
+  metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: 'off', model: store.get('model','mix'), rest: store.get('rest','on'), stake: store.get('stake', 100),
   lines: store.get('lines', {}), hist: store.get('hist', {}), odds: store.get('odds', {}), picks: store.get('picks', []), manual: store.get('manual', []),
   live: [], liveOk: null, eqSort: store.get('eqSort', ['tot', -1]),
 };
@@ -1873,11 +1871,11 @@ function lineupHTML(g, key){
     const T = teamStats(team, null, statKey); // promedio de equipo (respeta ventana)
     return `<div class="lu-team">${badge(team)} ${tname(team)} <span class="note">${side}${actual?(fromDB?' · alineación real':' · alineación en vivo'):' · titulares probables (último juego)'}</span></div>
       <div style="overflow-x:auto"><table><thead><tr><th></th><th>Jugador</th><th class="n">GP</th><th class="n">MIN</th><th class="n">PTS</th><th class="n">REB</th><th class="n">AST</th><th class="n">3PM</th><th class="n">L5 P/R/A</th><th class="n est" title="Minutos estimados para hoy">MIN est.</th><th class="n est" title="Parte de la proyección del equipo que le toca a este jugador">Proy. ${(PSTAT[S.metric]||'pts').toUpperCase()}</th>${actual?`<th class="n">${fromDB?'Ese juego':'Hoy'} P/R/A</th>`:''}</tr></thead>
-      <tbody>${body}<tr class="sumrow"><td></td><td colspan="${actual?11:10}">${statLbl}: suma de promedios disponibles <b>${fmt(sumAvail)}</b> · promedio del equipo <b>${fmt(T.f)}</b>${T.f&&sumAvail?` <span class="note">(${sumAvail>=T.f?'+':''}${fmt(sumAvail-T.f)})</span>`:''}
-        ${pp ? `<br>Proyección por jugadores: <b>${fmt(pp.f)}</b> <span class="note">(${pp.n} jugadores · índice de alineación <b>${pp.q.toFixed(2)}</b>${pp.q>=1.005?' más fuerte':pp.q<=0.995?' más débil':''} que la habitual → ${sgn((pp.qq-1)*100,1)}%${pp.fill>=1?` · ${fmt(pp.fill,0)}' para suplentes sin datos`:''})</span>` : ''}</td></tr></tbody></table></div>`;
+      <tbody>${body}<tr class="sumrow"><td></td><td colspan="${actual?11:10}">${statLbl}: promedio del equipo <b>${fmt(T.f)}</b>
+        ${pp ? ` · proyección por jugadores: <b>${fmt(pp.f)}</b> <span class="note">(${pp.n} jugadores · índice de alineación <b>${pp.q.toFixed(2)}</b>${pp.q>=1.005?' más fuerte':pp.q<=0.995?' más débil':''} que la habitual → ${sgn((pp.qq-1)*100,1)}%${pp.fill>=1?` · ${fmt(pp.fill,0)}' para suplentes sin datos`:''})</span>` : ''}</td></tr></tbody></table></div>`;
   };
   return head + teamBlock(g.a.t,'visita') + teamBlock(g.h.t,'local') +
-    `<div class="note" style="margin-top:6px">Promedios ${Number(S.win)?'últimos '+S.win+' juegos':'de temporada'} antes de esta fecha. T = titular. La suma excluye a los "Out".
+    `<div class="note" style="margin-top:6px">Promedios ${Number(S.win)?'últimos '+S.win+' juegos':'de temporada'} antes de esta fecha. T = titular. Los "Out" no cuentan.
       <b>MIN est.</b> = sus minutos promedio; titulares y los 3 siguientes los conservan y al resto se le reparte lo que falte para 240. <b>Índice de alineación</b>: cuánto produce cada jugador comparado con el promedio de su equipo, por los minutos que va a jugar; 1.00 = la alineación de siempre. La proyección del equipo (a favor y en contra del rival) se mueve 60% de esa diferencia. <b>Proy.</b> = la parte de cada jugador en esa proyección.</div></details>`;
 }
 
@@ -2032,13 +2030,12 @@ $('mAdd').onclick = () => { const h=$('mHome').value, a=$('mAway').value; if(h==
 
 // ---------- controles ----------
 $('metric').innerHTML = Object.entries(METRICS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
-for(const [id,key] of [['metric','metric'],['win','win'],['split','split'],['stat','stat'],['adj','adj'],['model','model'],['rest','rest']]){
+for(const [id,key] of [['metric','metric'],['win','win'],['split','split'],['stat','stat'],['model','model'],['rest','rest']]){
   $(id).value = S[key];
   $(id).onchange = e => { S[key] = e.target.value; store.set(key, S[key]); renderAll(); };
 }
 $('season').onchange = async e => { S.season = Number(e.target.value); store.set('season', S.season); _cache=null; renderAll(); if(S.adj!=='off' || S.model==='players' || S.model==='mix'){ await ensurePlayers(S.season); renderAll(); } };
 $('model').addEventListener('change', async () => { _sgCache = null; if(S.model==='players' || S.model==='mix'){ await ensurePlayers(S.season); await Promise.all(S.live.filter(g=>g.state!=='post' && !S.sum[g.id]).map(g=>fetchSummary(g.id))); renderAll(); } });
-$('adj').addEventListener('change', async () => { if(S.adj!=='off'){ await ensurePlayers(S.season); await Promise.all(S.live.filter(g=>g.state!=='post' && !S.sum[g.id]).map(g=>fetchSummary(g.id))); renderAll(); } });
 
 let tab = store.get('tab','hoy');
 function showTab(t){ tab=t; store.set('tab',t);

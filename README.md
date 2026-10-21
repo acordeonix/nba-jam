@@ -86,7 +86,7 @@ La temporada regular 2026-27 arranca el **20 de octubre de 2026**; a partir de a
 
 **Inicio de temporada:** mientras un equipo (o jugador) lleve menos de 20 juegos en la temporada elegida, la app completa con sus últimos juegos de la temporada anterior (en la tarjeta se ve, p. ej., GP 3+17).
 
-Controles globales: parámetro, temporada, ventana (toda / últimos 20 / 10 / 5), split local-visita, ajuste plantilla y bajas, modelo, descanso, promedio o mediana.
+Controles globales: parámetro, temporada, ventana (toda / últimos 20 / 10 / 5), split local-visita, modelo (Mixto por defecto; con Mixto o Jugadores las bajas y los cambios de plantilla ya van incluidos), descanso, promedio o mediana.
 
 ## Archivos de datos
 
