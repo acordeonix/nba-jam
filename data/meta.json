@@ -1,12 +1,13 @@
 {
-  "updated": "2026-10-20T20:42:50.250Z",
-  "games": 1230,
-  "last_date": "2026-04-12",
+  "updated": "2026-10-21T11:56:08.726Z",
+  "games": 1233,
+  "last_date": "2026-10-20",
   "season_types": [
     2
   ],
   "player_seasons": [
-    "2026"
+    "2026",
+    "2027"
   ],
   "player_cols": [
     "gid",
