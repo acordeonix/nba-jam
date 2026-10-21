@@ -1,0 +1,2219 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NBA JAM Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#e8590c">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="NBA JAM">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f3f1ec; --panel:#ffffff; --panel2:#f7f5f0; --ink:#17181b; --muted:#6b6d73; --line:#e2ded5;
+  --accent:#e8590c; --accent-ink:#fff; --over:#1f8a4c; --under:#c92a2a; --over-bg:rgba(31,138,76,.13); --under-bg:rgba(201,42,42,.12);
+  --live:#d6336c; --chip:#ece8df; --shadow:0 1px 2px rgba(0,0,0,.05),0 4px 14px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1012; --panel:#17191c; --panel2:#1d2024; --ink:#ecebe7; --muted:#9a9ca2; --line:#2a2d32;
+  --accent:#ff7a2f; --accent-ink:#111; --over:#40c074; --under:#ff6b6b; --over-bg:rgba(64,192,116,.15); --under-bg:rgba(255,107,107,.14);
+  --live:#ff5c8a; --chip:#23262b; --shadow:none;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1012; --panel:#17191c; --panel2:#1d2024; --ink:#ecebe7; --muted:#9a9ca2; --line:#2a2d32;
+  --accent:#ff7a2f; --accent-ink:#111; --over:#40c074; --under:#ff6b6b; --over-bg:rgba(64,192,116,.15); --under-bg:rgba(255,107,107,.14);
+  --live:#ff5c8a; --chip:#23262b; --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 Barlow,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.num,td.n,th.n{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+header{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+.top{display:flex;align-items:center;gap:14px;padding:12px 0 8px;flex-wrap:wrap}
+.brand{font:700 30px/1 "Barlow Condensed",sans-serif;letter-spacing:.5px;text-transform:uppercase;display:flex;align-items:baseline;gap:8px}
+.brand b{color:var(--accent)}
+.brand small{font:500 13px Barlow,sans-serif;color:var(--muted);letter-spacing:0;text-transform:none}
+.status{margin-left:auto;font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.syncbox{display:flex;align-items:center;gap:6px}
+.syncbox button{min-height:28px;padding:2px 10px;font-size:13px}
+.syncbox .who{font-size:12.5px;color:var(--muted)}
+.syncbox .badge-n{background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:0 6px;font-size:11px;margin-left:4px}
+dialog.admin-dlg{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:0;width:min(560px,calc(100vw - 32px));box-shadow:0 10px 40px rgba(0,0,0,.35)}
+dialog.admin-dlg::backdrop{background:rgba(0,0,0,.45)}
+.adm{padding:16px 18px 18px} .adm-h{display:flex;justify-content:space-between;align-items:center}
+.adm h3{margin:0;font:700 22px "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase}
+.adm h4{margin:16px 0 6px;font:600 12px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.adm table{font-size:14px} .adm td{padding:8px 6px} .adm td.n button{font-family:Barlow,sans-serif;font-weight:600}
+.adm-add{display:flex;gap:8px;margin-top:12px} .adm-add input{flex:1;min-width:0}
+.syncbox .ok{color:var(--over);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.dot.ok{background:var(--over)} .dot.bad{background:var(--under)}
+.controls{display:flex;gap:10px;flex-wrap:wrap;padding:4px 0 10px;align-items:end}
+.ctl{display:flex;flex-direction:column;gap:3px}
+.ctl label{font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+select,input,button{font:inherit;color:inherit}
+select,input[type=number],input[type=date],input[type=text],input[type=email]{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;min-height:34px}
+input[type=number]{width:84px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;min-height:34px}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;font:600 16px "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.5px;padding:8px 14px;color:var(--muted);white-space:nowrap}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+main{padding:18px 0 60px}
+section{display:none} section.on{display:block}
+#pkDlg{border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);padding:18px;width:min(440px,calc(100vw - 32px));box-shadow:0 10px 40px rgba(0,0,0,.35)}
+#pkDlg::backdrop{background:rgba(0,0,0,.45)}
+.dlg-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px}
+.dlg-grid label{display:flex;flex-direction:column;gap:3px;font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.dlg-grid input,.dlg-grid select{width:100%;box-sizing:border-box;font:15px Barlow,sans-serif;text-transform:none;letter-spacing:0;color:var(--ink)}
+.tagrest{display:inline-block;font:600 11px Barlow,sans-serif;padding:1px 6px;border-radius:6px;border:1px solid var(--line);color:var(--muted);margin-left:4px;vertical-align:middle}
+.tagrest.b2b{border-color:var(--under);color:var(--under)}
+.mkt{display:flex;flex-direction:column;gap:4px;font-size:13px;padding:0 14px 12px;color:var(--muted)}
+.mkt b{color:var(--ink)}
+.cmp{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:13px;padding:0 14px 10px}
+.cmp .k{font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.cmp b{color:var(--ink)}
+.pill.warn{background:rgba(234,179,8,.15);color:#d4a017;border:1px solid rgba(234,179,8,.35)}
+.btrec{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+tr.best td{background:var(--panel2);font-weight:600}
+h2{font:700 22px "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.4px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.gh{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:13px;color:var(--muted)}
+.gh .live{color:var(--live);font-weight:600;display:flex;gap:6px;align-items:center}
+.gh .live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--live);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.teams{display:grid;grid-template-columns:1fr auto auto;gap:4px 12px;padding:12px 14px 6px;align-items:center}
+.tm{display:flex;align-items:center;gap:8px;font-weight:600;font-size:16px}
+.badge{min-width:30px;padding:0 3px;height:22px;border-radius:5px;color:#fff;font:700 11px "Barlow Condensed","Arial Narrow",sans-serif;display:inline-flex;align-items:center;justify-content:center;letter-spacing:.3px;flex:none}
+.tm small{color:var(--muted);font-weight:500;font-size:12px}
+.teams .v{font-size:13px;color:var(--muted);text-align:right}
+.teams .s{font:600 18px "JetBrains Mono",ui-monospace,monospace;text-align:right;min-width:36px;line-height:1.1}
+.lu td.est,.lu th.est{background:var(--panel2)}
+.teams .s small.sc{display:block;font:500 11px Barlow,sans-serif;color:var(--muted);white-space:nowrap}
+.proj{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);margin-top:6px}
+.proj>div{padding:9px 12px;border-right:1px solid var(--line)} .proj>div:last-child{border-right:0}
+.k{font:600 10.5px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.big{font:600 22px "JetBrains Mono",ui-monospace,monospace;line-height:1.2}
+.lineRow{display:flex;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
+.pill{display:inline-block;font:700 13px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;padding:3px 9px;border-radius:999px;background:var(--chip)}
+.pill.over{background:var(--over-bg);color:var(--over)} .pill.under{background:var(--under-bg);color:var(--under)}
+.pick{display:flex;gap:6px;margin-left:auto}
+.pick button{font:700 13px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;padding:4px 12px}
+.pick button.sel.o{background:var(--over);border-color:var(--over);color:#fff}
+.pick button.sel.u{background:var(--under);border-color:var(--under);color:#fff}
+.meta{padding:0 14px 12px;font-size:12.5px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+.meta b{color:var(--ink);font-weight:600}
+.tablewrap{overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);max-height:72vh}
+table{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}
+th{position:sticky;top:0;background:var(--panel2);font:600 12px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);cursor:pointer;z-index:2;user-select:none}
+th.n,td.n{text-align:right}
+td.sticky,th.sticky{position:sticky;left:0;background:var(--panel);z-index:1}
+th.sticky{z-index:3;background:var(--panel2)}
+tr:hover td{background:var(--panel2)}
+td.o{background:var(--over-bg);color:var(--over)} td.u{background:var(--under-bg);color:var(--under)}
+td.g{padding:6px 6px;min-width:36px;text-align:center;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12.5px}
+th.sorted::after{content:" ▾";color:var(--accent)} th.sorted.asc::after{content:" ▴"}
+.bar{display:inline-block;height:6px;border-radius:3px;background:var(--accent);opacity:.75;vertical-align:middle;margin-left:6px}
+.empty{grid-column:1/-1;padding:40px 20px;text-align:center;color:var(--muted);background:var(--panel);border:1px dashed var(--line);border-radius:12px}
+.empty h3{color:var(--ink);font:600 20px "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;margin:0 0 6px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+pre{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;font:12.5px/1.5 "JetBrains Mono",ui-monospace,monospace}
+.res-W{color:var(--over);font-weight:700} .res-L{color:var(--under);font-weight:700} .res-P{color:var(--muted);font-weight:700}
+.liveproj{background:color-mix(in srgb, var(--live) 6%, transparent)}
+details.hist{border-top:1px solid var(--line);padding:8px 14px 12px}
+details.hist summary{cursor:pointer;font:600 12px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.hchart{width:100%;height:auto;margin-top:8px;display:block}
+.hchart text{font:10px "JetBrains Mono",ui-monospace,monospace;fill:var(--muted)}
+.hchart .gridl{stroke:var(--line);stroke-width:1}
+.hchart .linel{fill:none;stroke:var(--accent);stroke-width:2}
+.hchart .lined{fill:var(--accent)}
+.hchart .projl{fill:none;stroke:var(--ink);stroke-width:1.5;opacity:.7}
+.hchart .projd{fill:var(--ink);opacity:.8}
+.hchart .prel{stroke:var(--muted);stroke-dasharray:4 3}
+.hchart .finl{stroke:var(--over);stroke-width:1.5}
+.legend{display:flex;gap:12px;font-size:11.5px;color:var(--muted);margin:4px 0 6px;flex-wrap:wrap}
+.legend span::before{content:"";display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+.lg-line::before{border-color:var(--accent)!important} .lg-proj::before{border-color:var(--ink)!important;opacity:.7}
+.lg-pre::before{border-top-style:dashed!important;border-color:var(--muted)!important} .lg-fin::before{border-color:var(--over)!important}
+.htab{font-size:12.5px} .htab th{position:static;cursor:default} .htab td,.htab th{padding:4px 6px}
+button.mini{min-height:22px;padding:0 6px;font-size:11px}
+.card:has(details.lu[open]),.card:has(details[data-open$="|h2h"][open]){grid-column:1/-1}
+.adjnote{flex-direction:column;align-items:flex-start;gap:4px;padding:6px 14px 8px;border-top:1px dashed var(--line)} .adjnote .badge{transform:scale(.85)}
+.odds{display:inline-flex;align-items:center;gap:4px}
+.oddsIn{width:62px;min-height:30px;padding:4px 6px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px}
+.oddsIn.bad{border-color:var(--under);color:var(--under)}
+.valrow{padding-top:2px}
+.livepanel{border-top:1px solid var(--line);background:color-mix(in srgb, var(--live) 5%, transparent)}
+.livepanel .proj{border-top:0;margin-top:0;background:none}
+.lp-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 14px;font-size:12.5px;border-top:1px dashed var(--line)}
+.livestrip{border-top:1px solid var(--line);padding:8px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.ls-time{flex:1;min-width:160px;font-size:13px}
+.ls-bar{height:6px;border-radius:3px;background:var(--chip);margin-top:6px;overflow:hidden}
+.ls-bar span{display:block;height:100%;background:var(--accent)}
+.ls-q{width:auto;font-size:12.5px} .ls-q th{position:static;cursor:default;padding:2px 6px} .ls-q td{padding:2px 6px;border-bottom:0}
+.pbp .kpis{grid-template-columns:repeat(3,1fr);gap:8px} .pbp .kpi{padding:8px 10px} .pbp .kpi .big{font-size:15px!important}
+.pbp-t{font-size:12.5px;margin-top:6px} .pbp-t td{padding:4px 6px;white-space:normal} .pbp-t tr.scp td:nth-child(2){font-weight:600}
+.det{border-top:1px solid var(--line);padding:8px 14px 12px}
+.det summary{cursor:pointer;font:600 12px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.det table{font-size:12.5px;margin-top:6px} .det th{position:static;cursor:default} .det td,.det th{padding:4px 6px}
+.lu-team{font:600 13px Barlow,sans-serif;margin:10px 0 2px;display:flex;align-items:center;gap:6px}
+.inj{font:700 10.5px Barlow,sans-serif;padding:1px 6px;border-radius:999px;background:var(--under-bg);color:var(--under);text-transform:uppercase}
+.inj.dtd{background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent)}
+tr.out td{opacity:.45;text-decoration:line-through}
+.st{font:700 10px Barlow,sans-serif;color:var(--accent)}
+.sumrow td{border-top:2px solid var(--line);font-weight:600}
+.sumrow2 td{font-weight:600;color:var(--muted)}
+.today{color:var(--live);font-weight:600}
+.rk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px}
+.rk-col{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.rk-col h3{margin:0;padding:10px 14px;background:var(--panel2);border-bottom:1px solid var(--line);font:700 18px "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.4px;display:flex;justify-content:space-between;align-items:baseline}
+.rk-col h3 small{font:500 12px Barlow,sans-serif;color:var(--muted);text-transform:none;letter-spacing:0}
+.rk-col table{font-size:13px} .rk-col th{position:static} .rk-col td,.rk-col th{padding:6px 7px}
+.rk-pl{display:flex;align-items:center;gap:8px} .rk-pl b{font-weight:600;white-space:nowrap}
+.rk-meta{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.rk-pos{font:700 11px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.4px;color:var(--ink)}
+.rk-n{font:700 15px "Barlow Condensed","Arial Narrow",sans-serif;color:var(--muted);width:26px}
+tr.top3 .rk-n{color:var(--accent)}
+.score{font:600 15px "JetBrains Mono",ui-monospace,monospace}
+.up{color:var(--over);font-size:11px} .down{color:var(--under);font-size:11px}
+@media (max-width:560px){ .rk-grid{grid-template-columns:1fr} }
+.pl-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:var(--shadow)}
+.pl-card h3{margin:0;font:700 22px "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;display:flex;gap:8px;align-items:center}
+tr.click{cursor:pointer}
+.manual{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.note{font-size:12.5px;color:var(--muted)}
+@media (max-width:560px){
+  .brand{font-size:24px} .status{margin-left:0;width:100%}
+  header{position:static}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .controls select{width:100%;min-width:0}
+  .cards{grid-template-columns:1fr}
+  .big{font-size:19px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">NBA <b>JAM</b> <small>tracker de totales por partido</small></div>
+      <div class="status"><span id="syncBox" class="syncbox"></span><span class="dot" id="dataDot"></span><span id="dataStatus">Cargando datos…</span>
+        <button id="themeBtn" title="Tema" style="min-height:28px;padding:2px 9px">◐</button></div>
+    </div>
+    <div class="controls">
+      <div class="ctl"><label for="metric">Parámetro</label><select id="metric"></select></div>
+      <div class="ctl"><label for="season">Temporada</label><select id="season"></select></div>
+      <div class="ctl"><label for="win">Ventana</label>
+        <select id="win"><option value="0">Toda la temporada</option><option value="20">Últimos 20</option><option value="10">Últimos 10</option><option value="5">Últimos 5</option></select></div>
+      <div class="ctl"><label for="split">Local / visita</label>
+        <select id="split"><option value="all">Todos los juegos</option><option value="ha">Split: local en casa, visita fuera</option></select></div>
+      <div class="ctl"><label for="model">Modelo</label>
+        <select id="model"><option value="avg">Promedios (tu hoja)</option><option value="pace">Ritmo × eficiencia</option><option value="players">Jugadores (alineación)</option><option value="mix">Mixto: promedios + jugadores</option></select></div>
+      <div class="ctl"><label for="rest">Descanso</label>
+        <select id="rest"><option value="on">Ajustar back-to-back</option><option value="off">Sin ajuste</option></select></div>
+      <div class="ctl"><label for="stat">Cálculo</label>
+        <select id="stat"><option value="mean">Promedio</option><option value="median">Mediana</option></select></div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-t="hoy" class="on">Partidos</button>
+      <button data-t="equipos">Equipos (OFF/DEF)</button>
+      <button data-t="registro">Registro por juego</button>
+      <button data-t="jugadores">Jugadores</button>
+      <button data-t="ranking">Ranking</button>
+      <button data-t="picks">Mis picks</button>
+      <button data-t="competencia">Competencia</button>
+      <button data-t="seguimiento">Seguimiento</button>
+      <button data-t="modelo">Prueba del modelo</button>
+      <button data-t="datos">Datos / Excel</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="s-hoy" class="on">
+    <div class="row">
+      <div class="ctl"><label for="slateDate">Fecha (hora del Este)</label><input type="date" id="slateDate"></div>
+      <button id="prevDay">◀</button><button id="nextDay">▶</button><button id="todayBtn">Hoy</button>
+      <button id="refreshLive">Actualizar en vivo</button>
+      <span class="note" id="liveNote"></span>
+    </div>
+    <div class="manual">
+      <div class="ctl"><label for="mHome">Local</label><select id="mHome"></select></div>
+      <div class="ctl"><label for="mAway">Visita</label><select id="mAway"></select></div>
+      <button id="mAdd" class="primary">Agregar partido manual</button>
+      <span class="note">Para analizar cualquier cruce aunque no esté en el calendario del día.</span>
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section id="s-equipos">
+    <h2>Equipos — a favor, en contra y total</h2>
+    <p class="sub" id="eqSub"></p>
+    <div class="tablewrap"><table id="eqTable"></table></div>
+  </section>
+
+  <section id="s-registro">
+    <h2>Registro juego por juego</h2>
+    <p class="sub">Total del partido (equipo + rival) en cada juego, en orden cronológico. Pon una línea para contar overs y unders.</p>
+    <div class="row">
+      <div class="ctl"><label for="regLine">Línea</label><input type="number" step="0.5" id="regLine" placeholder="ej. 54.5"></div>
+      <div class="ctl"><label for="regView">Valor por celda</label>
+        <select id="regView"><option value="tot">Total del partido</option><option value="f">Solo el equipo</option><option value="c">Solo el rival</option></select></div>
+    </div>
+    <div class="tablewrap"><table id="regTable"></table></div>
+  </section>
+
+  <section id="s-jugadores">
+    <h2>Jugadores</h2>
+    <p class="sub" id="plSub">Promedios por jugador de la temporada seleccionada (respeta la ventana de arriba). Toca un jugador para ver su registro juego por juego.</p>
+    <div class="row">
+      <div class="ctl"><label for="plSearch">Buscar</label><input type="text" id="plSearch" placeholder="Nombre…"></div>
+      <div class="ctl"><label for="plTeam">Equipo</label><select id="plTeam"></select></div>
+      <div class="ctl"><label for="plMin">Mín. juegos</label><input type="number" id="plMin" value="3" min="0" style="width:70px"></div>
+    </div>
+    <div id="plDetail"></div>
+    <div class="tablewrap"><table id="plTable"></table></div>
+  </section>
+
+  <section id="s-ranking">
+    <h2>Ranking por posición</h2>
+    <p class="sub" id="rkSub"></p>
+    <div class="row">
+      <div class="ctl"><label for="rkScore">Puntaje</label>
+        <select id="rkScore">
+          <option value="eff">Eficiencia NBA (EFF)</option>
+          <option value="fan">Fantasy (DFS)</option>
+          <option value="pts">Puntos</option><option value="reb">Rebotes</option><option value="ast">Asistencias</option>
+          <option value="pra">P+R+A</option><option value="tpm">Triples</option><option value="stl">Robos</option><option value="blk">Bloqueos</option>
+        </select></div>
+      <div class="ctl"><label for="rkMinGp">Mín. juegos</label><input type="number" id="rkMinGp" value="5" min="1" style="width:70px"></div>
+      <div class="ctl"><label for="rkMinMin">Mín. minutos</label><input type="number" id="rkMinMin" value="15" min="0" style="width:70px"></div>
+      <div class="ctl"><label for="rkTop">Mostrar</label><select id="rkTop"><option>10</option><option selected>15</option><option>25</option></select></div>
+    </div>
+    <div class="rk-grid" id="rkGrid"></div>
+    <p class="note" id="rkNote"></p>
+  </section>
+
+  <section id="s-picks">
+    <h2>Mis picks</h2>
+    <p class="sub">Se guardan en este navegador. Se califican solos cuando el partido termina. Exporta para respaldar o pasar a otro dispositivo.</p>
+    <div class="kpis" id="pickKpis"></div>
+    <div class="row">
+      <div class="ctl"><label for="stakeDef">Monto por pick ($)</label><input type="number" id="stakeDef" min="0" step="10" style="width:100px"></div>
+      <span class="note">Se usa para los picks nuevos. Para cambiar uno ya hecho, toca ✏️.</span>
+    </div>
+    <div class="row">
+      <button id="expCsv">Exportar CSV</button><button id="expJson">Exportar respaldo</button>
+      <label class="note" style="display:flex;gap:6px;align-items:center"><button id="impBtn" type="button">Importar respaldo</button><input type="file" id="impFile" accept=".json" hidden></label>
+    </div>
+    <div class="tablewrap"><table id="pickTable"></table></div>
+  </section>
+
+  <section id="s-competencia">
+    <h2>Competencia</h2>
+    <p class="sub">Tabla entre los usuarios aprobados. Los picks de cada quien se revelan cuando empieza su partido, y desde ese momento ya no se pueden editar ni borrar en la competencia. Se ordena por % de acierto (toca un encabezado para ordenar por otra columna).</p>
+    <div class="row">
+      <div class="ctl"><label for="lgRange">Periodo</label>
+        <select id="lgRange"><option value="0">Toda la temporada</option><option value="30">Últimos 30 días</option><option value="7">Últimos 7 días</option><option value="1">Hoy</option></select></div>
+      <div class="ctl"><label for="lgMetric">Parámetro</label><select id="lgMetric"></select></div>
+      <div class="ctl"><label for="lgMin">Mín. picks</label><input type="number" id="lgMin" min="0" style="width:70px"></div>
+      <button id="lgRefresh">Actualizar</button><span class="note" id="lgNote"></span>
+    </div>
+    <div class="tablewrap"><table id="lgTable"></table></div>
+    <h2 style="margin-top:18px;font-size:19px" id="lgFeedH">Picks revelados</h2>
+    <div class="tablewrap"><table id="lgFeed"></table></div>
+  </section>
+
+  <section id="s-seguimiento">
+    <h2>Seguimiento del modelo</h2>
+    <p class="sub" id="sgSub"></p>
+    <div class="row">
+      <div class="ctl"><label for="sgRange">Periodo</label>
+        <select id="sgRange"><option value="0">Toda la temporada</option><option value="30">Últimos 30 días</option><option value="14">Últimos 14 días</option><option value="7">Últimos 7 días</option></select></div>
+      <div class="ctl"><label for="sgTeam">Equipo</label><select id="sgTeam"></select></div>
+    </div>
+    <div class="kpis" id="sgKpis"></div>
+    <div id="sgChart"></div>
+    <h2 style="margin-top:18px;font-size:19px">Promedios vs. Mixto</h2>
+    <p class="sub">Los mismos partidos con cada modelo (resto de la configuración igual). "Cuando coinciden" = Promedios y Mixto quedaron del mismo lado de la línea.</p>
+    <div class="tablewrap"><table id="sgModels"></table></div>
+    <h2 style="margin-top:18px;font-size:19px">Qué equipos se apegan más a la proyección</h2>
+    <p class="sub">Ordenado por el error del equipo (lo que anotó o produjo él contra lo que se le proyectó). Toca un encabezado para ordenar.</p>
+    <div class="tablewrap"><table id="sgTeams"></table></div>
+    <h2 style="margin-top:18px;font-size:19px">Partido por partido</h2>
+    <div class="tablewrap"><table id="sgGames"></table></div>
+    <p class="note" id="sgFoot"></p>
+  </section>
+
+  <section id="s-modelo">
+    <h2>Prueba del modelo</h2>
+    <p class="sub" id="btSub">Recorre la temporada seleccionada partido por partido, calcula la proyección con <b>solo los juegos anteriores</b> a cada fecha y la compara con el resultado real. Así ves qué tan bien le atina cada configuración y cuál conviene usar.</p>
+    <div class="row"><button id="btRun" class="primary">Correr prueba</button><span class="note" id="btNote"></span></div>
+    <div id="btRec"></div>
+    <div class="tablewrap"><table id="btTable"></table></div>
+    <p class="note" id="btFoot"></p>
+  </section>
+
+  <section id="s-datos">
+    <h2>Datos</h2>
+    <div class="kpis" id="dataKpis"></div>
+    <p>La base se actualiza sola con GitHub Actions (3 veces al día). Archivos:</p>
+    <ul>
+      <li><a href="data/games.csv" download>data/games.csv</a> — 2 filas por partido (una por equipo) con stats a favor <code>_f</code>, en contra <code>_c</code> y total <code>_tot</code>.</li>
+      <li><a href="data/games.json">data/games.json</a> — misma información en JSON.</li>
+    </ul>
+    <h2 style="margin-top:20px">Conectar a Excel (Power Query)</h2>
+    <p class="sub">Datos → Obtener datos → De otras fuentes → Consulta en blanco → Editor avanzado, pega esto. Luego <b>Actualizar todo</b> cada vez que quieras traer lo nuevo.</p>
+    <pre id="pq"></pre>
+  </section>
+</main>
+<dialog id="pkDlg">
+  <form method="dialog" id="pkForm">
+    <h3 style="margin:0 0 4px">Editar pick</h3>
+    <p class="note" id="pkInfo" style="margin:0 0 12px"></p>
+    <div class="dlg-grid">
+      <label>Lado<select name="pick"><option>OVER</option><option>UNDER</option></select></label>
+      <label>Línea<input name="line" type="number" step="0.5" required></label>
+      <label>Momio<input name="odds" type="text" inputmode="decimal" placeholder="-110 o 1.91"></label>
+      <label>Monto ($)<input name="stake" type="number" min="0" step="10"></label>
+    </div>
+    <p class="note" id="pkEv" style="min-height:1.2em"></p>
+    <div class="row" style="justify-content:flex-end;margin:0">
+      <button value="cancel" formnovalidate>Cancelar</button><button value="ok" class="primary">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+'use strict';
+const qs = new URLSearchParams(location.search);
+const ESPN = qs.get('espn') || 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+const DATA = (qs.get('data') || 'data').replace(/\/$/, '');
+
+const TEAMS = {
+  ATL:['Atlanta','#c8102e'], BOS:['Boston','#007a33'], BKN:['Brooklyn','#222'], CHA:['Charlotte','#1d1160'],
+  CHI:['Chicago','#ce1141'], CLE:['Cleveland','#860038'], DAL:['Dallas','#00538c'], DEN:['Denver','#0e2240'],
+  DET:['Detroit','#c8102e'], GS:['Golden St.','#1d428a'], HOU:['Houston','#ce1141'], IND:['Indiana','#002d62'],
+  LAC:['L.A. Clippers','#c8102e'], LAL:['L.A. Lakers','#552583'], MEM:['Memphis','#5d76a9'], MIA:['Miami','#98002e'],
+  MIL:['Milwaukee','#00471b'], MIN:['Minnesota','#0c2340'], NO:['New Orleans','#0c2340'], NY:['New York','#006bb6'],
+  OKC:['Oklahoma City','#007ac1'], ORL:['Orlando','#0077c0'], PHI:['Philadelphia','#006bb6'], PHX:['Phoenix','#1d1160'],
+  POR:['Portland','#e03a3e'], SAC:['Sacramento','#5a2d81'], SA:['San Antonio','#555'], TOR:['Toronto','#ce1141'],
+  UTAH:['Utah','#002b5c'], WSH:['Washington','#002b5c'],
+};
+const ALIAS = { GSW:'GS', NOP:'NO', NYK:'NY', SAS:'SA', UTA:'UTAH', WAS:'WSH', BRK:'BKN', PHO:'PHX', CHO:'CHA' };
+const norm = a => ALIAS[a] || a;
+const tname = a => a==='FA' ? 'Sin equipo' : (TEAMS[a] || [a])[0];
+const badge = a => `<span class="badge" style="background:${(TEAMS[a]||[0,'#666'])[1]}">${a}</span>`;
+
+const sum2 = (q, n) => (q && q.length >= n) ? q.slice(0, n).reduce((x, y) => x + y, 0) : null;
+const METRICS = {
+  ast: { label:'Asistencias', f:t=>t.ast, live:'assists', dec:1 },
+  pts: { label:'Puntos', f:t=>t.pts, live:'points', dec:1 },
+  q1:  { label:'Puntos 1er cuarto', f:t=>t.q?.[0] ?? null, live:'q1', dec:1, seg:12 },
+  h1:  { label:'Puntos 1a mitad', f:t=>sum2(t.q,2), live:'h1', dec:1, seg:24 },
+  to:  { label:'Pérdidas (TO)', f:t=>t.to, live:null, dec:1 },
+  reb: { label:'Rebotes', f:t=>t.reb, live:'rebounds', dec:1 },
+  tpm: { label:'Triples anotados', f:t=>t.tpm, live:'threePointFieldGoalsMade', dec:1 },
+  stl: { label:'Robos', f:t=>t.stl, live:null, dec:1 },
+  blk: { label:'Bloqueos', f:t=>t.blk, live:null, dec:1 },
+  fta: { label:'Tiros libres intentados', f:t=>t.fta, live:null, dec:1 },
+};
+
+// ---------- storage (try/catch, puede fallar en modo privado) ----------
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('nbajam.'+k); return v==null?d:JSON.parse(v);}catch{return d;} },
+  set(k, v){ try{ localStorage.setItem('nbajam.'+k, JSON.stringify(v)); }catch{} },
+};
+
+// ---------- estado ----------
+const S = {
+  games: [], meta: null, slateFile: [],
+  metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: 'off', model: store.get('model','mix'), rest: store.get('rest','on'), stake: store.get('stake', 100),
+  lines: store.get('lines', {}), hist: store.get('hist', {}), odds: store.get('odds', {}), picks: store.get('picks', []), manual: store.get('manual', []),
+  live: [], liveOk: null, eqSort: store.get('eqSort', ['tot', -1]),
+};
+
+const $ = id => document.getElementById(id);
+// Sincronización en la nube: sync.js reemplaza estas funciones si hay configuración de Firebase
+const Sync = { on:false, savePick(){}, deletePick(){}, saveLine(){}, saveManual(){}, loadLeague(){} };
+const pickId = p => p.uid || String(p.created||'').replace(/[^0-9A-Za-z]/g,'');
+const fmt = (v, d=1) => v==null || Number.isNaN(v) ? '—' : Number(v).toFixed(d);
+const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+const median = a => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+const sd = a => { if(a.length<2) return null; const m=mean(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1)); };
+const agg = a => S.stat==='median' ? median(a) : mean(a);
+function etToday(){ return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()); }
+function addDays(iso,n){ const d=new Date(iso+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+// Normal CDF (aprox. Abramowitz-Stegun)
+function phi(z){ const t=1/(1+.2316419*Math.abs(z)), d=.3989423*Math.exp(-z*z/2); const p=d*t*(.3193815+t*(-.3565638+t*(1.781478+t*(-1.821256+t*1.330274)))); return z>0?1-p:p; }
+
+// ---------- datos por equipo ----------
+function seasonGames(){ return S.games.filter(g => g.season == S.season); }
+let _cache = null;
+function teamLogs(){
+  if(_cache && _cache.key === S.season) return _cache.logs;
+  const logs = {};
+  for(const g of seasonGames()){
+    for(const [me, op, ha] of [[g.h,g.a,'H'],[g.a,g.h,'A']]){
+      const t = norm(me.t);
+      (logs[t] ||= []).push({ id:g.id, date:g.date, ha, opp:norm(op.t), me, op });
+    }
+  }
+  for(const t in logs) logs[t].sort((x,y)=>x.date.localeCompare(y.date));
+  _cache = { key:S.season, logs };
+  return logs;
+}
+// Toma n juegos repartidos a lo largo de toda la temporada (no solo el final, que trae equipos "tanqueando")
+const spread = (P, n) => { if(P.length <= n) return P; const out = []; for(let i=0;i<n;i++) out.push(P[Math.floor((i+0.5)*P.length/n)]); return out; };
+// Inicio de temporada: mientras un equipo lleve menos de CARRY juegos, se completa con sus últimos juegos de la temporada anterior
+const CARRY = 20;
+let _prevCache = null;
+function prevSeasonLogs(){
+  const ps = Number(S.season) - 1;
+  if(_prevCache && _prevCache.key===ps+'|'+S.games.length) return _prevCache.logs;
+  const logs = {};
+  for(const g of S.games) if(g.season == ps) for(const [me, op, ha] of [[g.h,g.a,'H'],[g.a,g.h,'A']])
+    (logs[norm(me.t)] ||= []).push({ id:g.id, date:g.date, ha, opp:norm(op.t), me, op, prev:true });
+  for(const t in logs) logs[t].sort((x,y)=>x.date.localeCompare(y.date));
+  _prevCache = { key:ps+'|'+S.games.length, logs };
+  return logs;
+}
+function logsAsOf(team){
+  let L = teamLogs()[team] || [];
+  if(S.asOf) L = L.filter(x => x.date < S.asOf);   // solo juegos previos a la fecha analizada
+  const need = CARRY - L.length;
+  if(need > 0){ const P = prevSeasonLogs()[team] || []; if(P.length) L = [...spread(P, need), ...L]; }
+  return L;
+}
+function windowed(team, ha){
+  let L = logsAsOf(team);
+  if(ha && S.split==='ha') L = L.filter(x => x.ha===ha);
+  const n = Number(S.win);
+  return n ? L.slice(-n) : L;
+}
+function teamStats(team, ha, metric=S.metric){
+  const f = METRICS[metric].f;
+  const L = windowed(team, ha).filter(x => f(x.me)!=null && f(x.op)!=null);
+  const F = L.map(x=>f(x.me)), C = L.map(x=>f(x.op)), T = L.map((x,i)=>F[i]+C[i]);
+  return { gp:L.length, f:agg(F), c:agg(C), tot:agg(T), sd:sd(T), totals:T, logs:L };
+}
+// ---------- descanso: back-to-back / 1 día / 2+ días ----------
+const restCat = d => d==null || d>=2 ? '2+' : d<=0 ? 'b2b' : '1';
+const REST_LBL = { b2b:'B2B', '1':'1 día', '2+':'2+ días' };
+const dayDiff = (a,b) => Math.round((new Date(b+'T12:00:00Z') - new Date(a+'T12:00:00Z'))/864e5);
+// Días de descanso antes de 'date' (0 = jugó ayer). Mira la base y también el calendario cargado (juegos de hoy aún sin box score).
+function restDays(team, date){
+  if(!date) return null;
+  let prev = null;
+  for(const x of teamLogs()[team] || []){ if(x.date < date) prev = x.date; else break; }
+  for(const x of [...S.live, ...S.slateFile.map(z=>({date:z.date, h:{t:norm(z.h)}, a:{t:norm(z.a)}}))]){
+    if(x.date && x.date < date && (!prev || x.date > prev) && (x.h.t===team || x.a.t===team) && dayDiff(x.date, date) <= 3) prev = x.date;
+  }
+  if(!prev) return null;
+  const d = dayDiff(prev, date) - 1;
+  return d > 10 ? null : d;
+}
+// Efecto medido en la liga: cuánto produce (f) y cuánto permite (c) un equipo según su descanso,
+// en comparación con su propio promedio de esa temporada. Usa todas las temporadas cargadas (solo juegos anteriores a la fecha).
+let _allLogs = null;
+function allTeamSeasonLogs(){
+  if(_allLogs && _allLogs.n === S.games.length) return _allLogs.v;
+  const v = {};
+  for(const g of S.games) for(const [me, op] of [[g.h,g.a],[g.a,g.h]]) (v[g.season+'|'+norm(me.t)] ||= []).push({ date:g.date, me, op });
+  for(const k in v) v[k].sort((x,y)=>x.date.localeCompare(y.date));
+  _allLogs = { n:S.games.length, v }; return v;
+}
+const _fxCache = new Map();
+function restEffects(metric=S.metric, asOf=S.asOf){
+  const key = metric+'|'+(asOf||'');
+  if(_fxCache.has(key)) return _fxCache.get(key);
+  const f = METRICS[metric].f, acc = { f:{}, c:{}, n:{} };
+  for(const L0 of Object.values(allTeamSeasonLogs())){
+    const L = (asOf ? L0.filter(x=>x.date<asOf) : L0).filter(x=>f(x.me)!=null && f(x.op)!=null);
+    if(L.length < 5) continue;
+    const mF = mean(L.map(x=>f(x.me))), mC = mean(L.map(x=>f(x.op)));
+    for(let i=1;i<L.length;i++){
+      const c = restCat(dayDiff(L[i-1].date, L[i].date) - 1);
+      acc.f[c] = (acc.f[c]||0) + f(L[i].me) - mF; acc.c[c] = (acc.c[c]||0) + f(L[i].op) - mC; acc.n[c] = (acc.n[c]||0) + 1;
+    }
+  }
+  const K = 40, out = { f:{}, c:{}, n:acc.n };   // se encoge hacia 0 si hay pocos casos
+  for(const c of ['b2b','1','2+']){ const n = acc.n[c]||0; out.f[c] = n ? acc.f[c]/(n+K) : 0; out.c[c] = n ? acc.c[c]/(n+K) : 0; }
+  if(_fxCache.size > 400) _fxCache.clear();
+  _fxCache.set(key, out); return out;
+}
+function restAdj(h, a){
+  if(S.rest==='off' || !S.asOf) return null;
+  const rH = restCat(restDays(h, S.asOf)), rA = restCat(restDays(a, S.asOf));
+  const fx = restEffects();
+  return { rH, rA, dH: fx.f[rH] + fx.c[rA], dA: fx.f[rA] + fx.c[rH] };   // cada efecto ya está medido contra el promedio propio
+}
+
+// ---------- ritmo × eficiencia ----------
+// Posesiones = FGA − OREB + TO + 0.44·FTA. Ritmo = posesiones por partido; eficiencia = parámetro por posesión.
+const poss = t => t && t.fga!=null && t.oreb!=null && t.to!=null && t.fta!=null ? t.fga - t.oreb + t.to + 0.44*t.fta : null;
+function paceOf(L, f){
+  let fs=0, ps=0, cs=0, qs=0, pace=0, n=0;
+  for(const x of L){ const pm=poss(x.me), po=poss(x.op), a=f(x.me), b=f(x.op);
+    if(pm==null || po==null || a==null || b==null) continue;
+    fs+=a; ps+=pm; cs+=b; qs+=po; pace+=(pm+po)/2; n++; }
+  return n ? { n, pace:pace/n, off:fs/ps, def:cs/qs } : null;
+}
+const _lgCache = new Map();
+function leaguePace(metric=S.metric){
+  const key = S.season+'|'+metric+'|'+(S.asOf||'');
+  if(_lgCache.has(key)) return _lgCache.get(key);
+  const f = METRICS[metric].f, L = [];
+  for(const t of Object.keys(TEAMS)) for(const x of logsAsOf(t)) L.push(x);
+  const r = paceOf(L, f);
+  if(_lgCache.size > 400) _lgCache.clear();
+  _lgCache.set(key, r); return r;
+}
+function paceProject(H, A, metric=S.metric){
+  const f = METRICS[metric].f, ph = paceOf(H.logs, f), pa = paceOf(A.logs, f), lg = leaguePace(metric);
+  if(!ph || !pa || !lg || !lg.off) return null;
+  const pace = ph.pace * pa.pace / lg.pace;
+  return { pace, ph, pa, lg, h: pace * ph.off * pa.def / lg.off, a: pace * pa.off * ph.def / lg.off };
+}
+
+// ---------- modelo por jugadores ----------
+// Cada jugador que se espera que juegue: minutos estimados × lo que produce por minuto (según su ventana),
+// minutos escalados a 240 por equipo, ajustado por lo que permite la defensa rival frente al promedio de la liga.
+const PSTAT = { pts:'pts', ast:'ast', reb:'reb', tpm:'tpm', stl:'stl', blk:'blk', to:'to', fta:'fta', q1:'pts', h1:'pts' };
+const _lgAvgCache = new Map();
+function leagueTeamAvg(metric){
+  const key = S.season+'|'+metric+'|'+(S.asOf||'');
+  if(_lgAvgCache.has(key)) return _lgAvgCache.get(key);
+  const f = METRICS[metric].f, v = [];
+  for(const t of Object.keys(TEAMS)) for(const x of logsAsOf(t)) if(f(x.me)!=null) v.push(f(x.me));
+  const r = mean(v);
+  if(_lgAvgCache.size > 400) _lgAvgCache.clear();
+  _lgAvgCache.set(key, r); return r;
+}
+function playerProject(g, team, opp, ha, baseF, metric=S.metric){
+  const sk = PSTAT[metric], PL = plFor(S.season);
+  if(!sk || !PL || !g || baseF==null) return null;
+  const before = aid => (PL.by[aid] || []).filter(o => !S.asOf || o.date < S.asOf);
+  const fromDB = (PL.byGame[g.id] || []).filter(o => o.team===team);
+  const box = (S.sum[g.id]?.box?.[team] || []).filter(x => !x.dnp);
+  let cands, source;
+  if(fromDB.length){ cands = fromDB.map(o => ({ aid:o.r[PC.aid], starter:o.r[PC.st]===1 })); source = 'real'; }
+  else if(box.length && g.state==='in'){ cands = box.map(x => ({ aid:x.aid, starter:!!x.starter })); source = 'vivo'; }
+  else {
+    const inj = injuriesFor(g.id, team);
+    cands = teamRotation(PL, team, S.asOf).filter(r => !isOut(inj[r.aid])).map(r => ({ aid:r.aid, L:r.L, starter:r.lastStarter }));
+    source = 'prob';
+  }
+  const list = [], gi = gameIndex(), tf = METRICS[metric==='q1'||metric==='h1' ? 'pts' : metric].f;
+  for(const c of cands){
+    const W = playerWindow(c.L || before(c.aid)).filter(o => o.r[PC.min] > 0 && pval(o.r, sk)!=null);
+    if(!W.length){ list.push({ aid:c.aid, starter:c.starter, gp:0, min:0, rate:null }); continue; }
+    const mins = W.reduce((t,o)=>t+o.r[PC.min],0), tot = W.reduce((t,o)=>t+pval(o.r,sk),0);
+    // lo que habría producido en esos minutos alguien al ritmo promedio de su equipo en esos mismos juegos
+    let exp = 0;
+    for(const o of W){ const gg = gi.get(o.gid); if(!gg) continue; const side = norm(gg.h.t)===o.team ? gg.h : gg.a; const ts = tf(side);
+      if(ts==null) continue; const tm = 5*(48 + 5*Math.max(0, (side.q?.length||4) - 4)); exp += ts * o.r[PC.min] / tm; }
+    list.push({ aid:c.aid, starter:c.starter, gp:W.length, min:mins/W.length, rate: mins ? tot/mins : null, rel: exp > 0 ? Math.min(3, tot/exp) : null });
+  }
+  const sumMin = list.reduce((t,x)=>t+x.min,0);
+  if(!sumMin) return null;
+  // Minutos: los titulares y los siguientes con más minutos (8 en total) conservan los suyos; el resto se reparte lo que queda hasta 240
+  const TM = 240;
+  list.sort((x,y)=> (!!y.starter - !!x.starter) || (y.min - x.min));
+  {
+    const top = list.slice(0, 8), rest = list.slice(8);
+    const sT = top.reduce((t,x)=>t+x.min,0), sR = rest.reduce((t,x)=>t+x.min,0);
+    if(sT >= TM){ for(const x of top) x.emin = x.min*TM/sT; for(const x of rest) x.emin = 0; }
+    else {
+      const left = TM - sT, kr = sR ? Math.min(left/sR, 1.15) : 0;
+      for(const x of top) x.emin = x.min; for(const x of rest) x.emin = x.min*kr;
+      if(sR*kr < left && sT < TM){ const kt = Math.min((TM - sR*kr)/sT, 1.15); for(const x of top) x.emin = x.min*kt; }
+    }
+  }
+  // Índice de alineación: cada jugador produce "rel" veces lo que su equipo produce por minuto (1 = como el promedio del equipo).
+  // Suma de rel × minutos / 240 = qué tan fuerte es esta alineación frente a la habitual (1.00 = igual).
+  const fill = Math.max(0, TM - list.reduce((t,x)=>t+x.emin,0));
+  const q = (list.reduce((t,x)=>t + (x.rel ?? 0.85)*x.emin, 0) + fill*0.85) / TM;   // sin datos o suplente: 85% del promedio
+  const LAM = 0.6;                                                                  // rendimientos decrecientes
+  const qq = 1 + LAM*(q - 1);
+  const f = baseF * qq;
+  for(const x of list) x.proj = f * (x.rel ?? 0.85) * x.emin / (q*TM);
+  list.sort((x,y)=> (y.emin||0)-(x.emin||0));
+  return { f, q, qq, fill, source, list, n: list.filter(x=>x.emin>=1).length };
+}
+
+// Inicio de temporada: en la temporada anterior, cuánto más (o menos) se produjo en el primer mes que en toda la temporada.
+// Se suma mientras la proyección use juegos de la temporada anterior, en proporción a cuántos de esos juegos usa.
+const _earlyCache = new Map();
+function earlyDelta(metric=S.metric){
+  const ps = Number(S.season) - 1, key = ps+'|'+metric+'|'+S.games.length;
+  if(_earlyCache.has(key)) return _earlyCache.get(key);
+  const f = METRICS[metric].f, G = S.games.filter(g => g.season == ps).sort((x,y)=>x.date.localeCompare(y.date));
+  let d = 0;
+  if(G.length > 300){
+    const end = addDays(G[0].date, 30), all = [], first = [];
+    for(const g of G) for(const t of [g.h, g.a]){ const v = f(t); if(v==null) continue; all.push(v); if(g.date < end) first.push(v); }
+    if(first.length > 50) d = mean(first) - mean(all);
+  }
+  _earlyCache.set(key, d); return d;
+}
+function earlyAdj(H, A){
+  const fr = T => T.logs?.length ? T.logs.filter(x=>x.prev).length / T.logs.length : 0;
+  const w = (fr(H) + fr(A))/2; if(!w) return null;
+  const d = earlyDelta(); if(Math.abs(d) < 0.01) return null;
+  return { per: d*w, w, d };   // por equipo
+}
+
+function project(h, a, line, adj, g){
+  const H = teamStats(h,'H'), A = teamStats(a,'A');
+  if(!H.gp || !A.gp) return { H, A, proj:null };
+  let base = (H.tot + A.tot)/2;                     // ATGA de la hoja JAM
+  let hB = (H.f + A.c)/2, aB = (A.f + H.c)/2, pm = null;
+  let plm = null;
+  if(S.model==='pace'){ pm = paceProject(H, A); if(pm){ hB = pm.h; aB = pm.a; base = pm.h + pm.a; } }
+  if((S.model==='players' || S.model==='mix') && g){
+    const ph = playerProject(g, h, a, 'H', (H.f + A.c)/2), pa = playerProject(g, a, h, 'A', (A.f + H.c)/2);
+    if(ph && pa){ plm = { h:ph, a:pa };
+      if(S.model==='players'){ hB = ph.f; aB = pa.f; base = hB + aB; }
+      else { hB = (hB + ph.f)/2; aB = (aB + pa.f)/2; base = (base + ph.f + pa.f)/2; plm.mix = true; } } }
+  const rest = restAdj(h, a);
+  const rH = rest?.dH || 0, rA = rest?.dA || 0;     // efecto del descanso
+  // producción perdida por bajas (ya descontada la recuperación); con el modelo por jugadores ya está incluida
+  const dH = plm ? 0 : adj?.dH || 0, dA = plm ? 0 : adj?.dA || 0;
+  const early = earlyAdj(H, A), eT = early?.per || 0;   // inicio de temporada (por equipo)
+  const proj = base + rH + rA - dH - dA + 2*eT;
+  const hProj = hB + rH - dH + eT, aProj = aB + rA - dA + eT;
+  const out = { H, A, proj, base, hProj, aProj, adj: plm ? null : adj, rest, pm, plm, early };
+  const sig = Math.sqrt(((H.sd||0)**2 + (A.sd||0)**2)/2);
+  out.sig = sig || null;
+  if(line!=null && line!==''){
+    const L = Number(line);
+    out.diff = proj - L;
+    out.sug = proj > L ? 'OVER' : proj < L ? 'UNDER' : '—';
+    out.pOver = sig ? 1 - phi((L - proj)/sig) : null;
+    const ov = arr => arr.length ? arr.filter(x=>x>L).length/arr.length : null;
+    out.hOver = ov(H.totals); out.aOver = ov(A.totals);
+    out.hN = H.totals.length; out.aN = A.totals.length;
+  }
+  return out;
+}
+
+// ---------- carga ----------
+async function loadData(){
+  try{
+    const [g, m, sl] = await Promise.all([
+      fetch(`${DATA}/games.json?v=${Date.now()}`).then(r=>r.ok?r.json():[]),
+      fetch(`${DATA}/meta.json?v=${Date.now()}`).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`${DATA}/slate.json?v=${Date.now()}`).then(r=>r.ok?r.json():[]).catch(()=>[]),
+    ]);
+    // Solo temporada regular NBA: fuera All-Star (equipos STARS/WORLD/…) y final de la Copa NBA
+    const EXCL = new Set(['401809839']);
+    S.games = g.filter(x => TEAMS[norm(x.h.t)] && TEAMS[norm(x.a.t)] && !EXCL.has(x.id) && !x.cup);
+    S.meta = m; S.slateFile = sl;
+    $('dataDot').className = 'dot ok';
+    const upd = m?.updated ? new Date(m.updated).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}) : '—';
+    $('dataStatus').textContent = `${S.games.length} partidos · act. ${upd}`;
+  }catch(e){
+    $('dataDot').className = 'dot bad'; $('dataStatus').textContent = 'No se pudo leer data/games.json';
+  }
+  const seasons = [...new Set(S.games.map(g=>g.season))].sort((a,b)=>b-a);
+  const saved = store.get('season', null);
+  S.season = seasons.includes(saved) ? saved : (seasons[0] ?? null);
+  $('season').innerHTML = seasons.length ? seasons.map(s=>`<option value="${s}">${s-1}-${String(s).slice(2)}</option>`).join('') : '<option>Sin datos aún</option>';
+  if(S.season) $('season').value = S.season;
+  _cache = null;
+}
+
+async function loadLive(date){
+  const d = date.replaceAll('-','');
+  $('liveNote').textContent = 'Consultando ESPN…';
+  try{
+    const r = await fetch(`${ESPN}/scoreboard?dates=${d}&limit=50`);
+    if(!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    S.live = (j.events||[]).map(ev => {
+      const comp = ev.competitions[0];
+      const side = ha => {
+        const c = comp.competitors.find(x=>x.homeAway===ha);
+        const st = {}; (c.statistics||[]).forEach(s=>st[s.name]=Number(s.displayValue));
+        const q = (c.linescores||[]).map(l=>Number(l.value ?? l.displayValue) || 0);
+        st.points = Number(c.score); st.q1 = q.length>=1 ? q[0] : null; st.h1 = q.length>=2 ? q[0]+q[1] : null;
+        return { t:norm(c.team.abbreviation), tid:String(c.team.id ?? ''), st, q };
+      };
+      const od = (comp.odds||[])[0];
+      const mk = od && od.overUnder!=null && !Number.isNaN(Number(od.overUnder)) ? { ou:Number(od.overUnder), sp: od.spread!=null ? Number(od.spread) : null, p: od.provider?.name || '', det: od.details || '' } : null;
+      return { id:ev.id, date, start:ev.date, type:ev.season?.type, state:ev.status?.type?.state, detail:ev.status?.type?.shortDetail,
+        period:ev.status?.period, clock:ev.status?.displayClock, h:side('home'), a:side('away'), mk };
+    });
+    S.liveOk = true;
+    $('liveNote').textContent = `En vivo de ESPN · ${new Date().toLocaleTimeString('es-MX',{timeStyle:'short'})}`;
+  }catch(e){
+    S.liveOk = false;
+    S.live = S.slateFile.filter(x=>x.date===date).map(x=>({ id:x.id, date, start:x.start, type:x.type, state:'pre', detail:'', h:{t:norm(x.h),st:{}}, a:{t:norm(x.a),st:{}}, mk:x.mk||null }));
+    $('liveNote').textContent = S.live.length ? 'Sin conexión a ESPN: mostrando calendario guardado.' : 'Sin conexión a ESPN y sin calendario guardado para esta fecha.';
+  }
+}
+
+// ---------- proyección en vivo ----------
+// Minutos jugados según periodo y reloj de ESPN (cuartos de 12', tiempos extra de 5')
+// Minutos del tramo del parámetro: 1er cuarto 12, 1a mitad 24, partido 48 (+5 por cada tiempo extra ya iniciado)
+const segFor = (m, g) => m.seg ? m.seg : 48 + 5*Math.max(0, (g?.period||4) - 4);
+function elapsedMin(g){
+  if(g.state!=='in') return null;
+  const p = g.period||1, c = String(g.clock??'0');
+  const left = c.includes(':') ? (+c.split(':')[0]) + (+c.split(':')[1])/60 : (+c)/60;
+  const before = p<=4 ? (p-1)*12 : 48 + (p-5)*5;
+  const len = p<=4 ? 12 : 5;
+  return Math.max(0, before + len - (left||0));
+}
+const PRIOR_MIN = 24; // el promedio de temporada "vale" como 24 minutos de juego observado
+function liveProject(P, cur, el, seg, line){
+  if(P.proj==null || cur==null || el==null) return null;
+  // seg = minutos del tramo (12, 24, 48 o 48+5 por cada tiempo extra); la proyección previa es por los minutos regulares
+  const base = Math.min(seg, 48);
+  const e = Math.min(el, seg), rem = Math.max(0, seg - e);
+  const preRate = P.proj/base;
+  const rate = (preRate*PRIOR_MIN + cur) / (PRIOR_MIN + e);
+  const proj = cur + rate*rem;
+  const pace = e>0 ? cur/e*base : null;
+  const sdG = Math.sqrt(((P.H.sd||0)**2 + (P.A.sd||0)**2)/2) * Math.sqrt(base/48);
+  const sdR = sdG * Math.sqrt(rem/base);
+  const out = { proj, pace, el:e, rem, seg, sdR, cur };
+  // Probabilidad de que el total final pase una línea L, dado lo que va del partido
+  out.pAt = L => { L = Number(L); if(cur > L) return 1; if(rem <= 0) return cur > L ? 1 : 0; return sdR>0 ? 1 - phi((L - proj)/sdR) : (proj > L ? 1 : 0); };
+  // Rango donde cae el total final 8 de cada 10 veces (nunca menor a lo ya acumulado)
+  out.lo = Math.max(cur, proj - 1.2816*sdR); out.hi = Math.max(cur, proj + 1.2816*sdR);
+  if(line!=null && line!==''){
+    const L = Number(line);
+    out.diff = proj - L; out.sug = proj>L?'OVER':proj<L?'UNDER':'—';
+    out.pOver = cur > L ? 1 : sdR>0 ? 1 - phi((L - proj)/sdR) : (proj>L?1:0);
+  }
+  return out;
+}
+const momentLabel = g => g.state==='in' ? (g.detail||'En vivo') : g.state==='post' ? 'Final' : 'Pre';
+
+function histChart(hist, preProj, seg, final){
+  const W=300, H=110, pl=28, pr=8, pt=8, pb=18;
+  const ys = [...hist.map(x=>x.line), ...hist.map(x=>x.proj).filter(v=>v!=null), preProj, final].filter(v=>v!=null);
+  if(!ys.length) return '';
+  let lo=Math.min(...ys), hi=Math.max(...ys); if(hi-lo<4){ lo-=2; hi+=2; }
+  const X = m => pl + (W-pl-pr)*Math.min(m,seg)/seg, Y = v => pt + (H-pt-pb)*(1-(v-lo)/(hi-lo));
+  const step = hist.map((x,i)=>`${i?'L':'M'}${X(x.min).toFixed(1)},${Y(x.line).toFixed(1)}` + (hist[i+1]?` L${X(hist[i+1].min).toFixed(1)},${Y(x.line).toFixed(1)}`:'')).join(' ');
+  const pj = hist.filter(x=>x.proj!=null);
+  const ticks = seg===48?[0,12,24,36,48]:seg===24?[0,12,24]:[0,6,12];
+  return `<svg viewBox="0 0 ${W} ${H}" class="hchart" role="img" aria-label="Movimiento de la línea">
+    ${ticks.map(t=>`<line x1="${X(t)}" x2="${X(t)}" y1="${pt}" y2="${H-pb}" class="gridl"/><text x="${X(t)}" y="${H-5}" text-anchor="middle">${t}'</text>`).join('')}
+    <text x="${pl-4}" y="${Y(hi)+4}" text-anchor="end">${fmt(hi,0)}</text><text x="${pl-4}" y="${Y(lo)}" text-anchor="end">${fmt(lo,0)}</text>
+    ${preProj!=null?`<line x1="${pl}" x2="${W-pr}" y1="${Y(preProj)}" y2="${Y(preProj)}" class="prel"/>`:''}
+    ${final!=null?`<line x1="${pl}" x2="${W-pr}" y1="${Y(final)}" y2="${Y(final)}" class="finl"/>`:''}
+    <path d="${step}" class="linel"/>
+    ${hist.map(x=>`<circle cx="${X(x.min)}" cy="${Y(x.line)}" r="3" class="lined"/>`).join('')}
+    ${pj.length>1?`<path d="${pj.map((x,i)=>`${i?'L':'M'}${X(x.min).toFixed(1)},${Y(x.proj).toFixed(1)}`).join(' ')}" class="projl"/>`:''}
+    ${pj.map(x=>`<circle cx="${X(x.min)}" cy="${Y(x.proj)}" r="2.5" class="projd"/>`).join('')}
+  </svg>`;
+}
+
+// ---------- ajuste por alineación ----------
+// Aporte de un jugador = lo que produjo en los juegos de la ventana del equipo / juegos de la ventana
+// (si no jugó en esa ventana, aporta 0: el promedio del equipo ya refleja su ausencia).
+const ADJ_STAT = { pts:'pts', ast:'ast', reb:'reb', tpm:'tpm', stl:'stl', blk:'blk', to:'to', fta:'fta', q1:'pts', h1:'pts' };
+function lineupAdj(g){
+  if(S.adj==='off' || !g) return null;
+  const sk = ADJ_STAT[S.metric]; if(!sk) return null;
+  const PL = plFor(S.season); if(!PL) return null;
+  const rec = Number(S.adj), m = METRICS[S.metric];
+  const fromDB = PL.byGame[g.id], box = S.sum[g.id]?.box;
+  const side = (team, ha) => {
+    const T = teamStats(team, ha);
+    if(!T.gp) return { d:0, list:[] };
+    const ids = new Set(T.logs.map(x=>x.id));
+    let missing;
+    if(fromDB){                       // partido terminado: los de la rotación que no jugaron
+      const played = new Set(fromDB.filter(o=>o.team===team).map(o=>o.r[PC.aid]));
+      missing = teamRotation(PL, team, S.asOf).map(r=>r.aid).filter(aid=>!played.has(aid));
+    } else {                          // previo / en vivo: reporte de lesiones "Out" + DNP del box en vivo
+      const inj = injuriesFor(g.id, team);
+      missing = Object.keys(inj).filter(aid=>isOut(inj[aid]));
+      for(const x of box?.[team]||[]) if(x.dnp && !missing.includes(x.aid)) missing.push(x.aid);
+    }
+    // para 1er cuarto / 1a mitad: proporción de los puntos del equipo que caen en ese tramo
+    const share = (S.metric==='q1'||S.metric==='h1') ? (() => { const P = teamStats(team, ha, 'pts'); return P.f ? (T.f / P.f) : 0; })() : 1;
+    const list = [];
+    for(const aid of missing){
+      const rows = (PL.by[aid]||[]).filter(o=>o.team===team && ids.has(o.gid));
+      if(!rows.length) continue;
+      const contrib = rows.reduce((s,o)=>s+(pval(o.r,sk)||0),0) / T.gp * share;
+      if(contrib>0.05) list.push({ aid, contrib, gp:rows.length });
+    }
+    list.sort((x,y)=>y.contrib-x.contrib);
+    const lost = list.reduce((s,x)=>s+x.contrib,0);
+
+    // Cambios de plantilla: los promedios del equipo vienen de partidos con otra plantilla
+    // salen = jugaron con el equipo en la ventana y ya no están en el roster actual
+    // llegan = están en el roster actual y no jugaron con el equipo en la ventana (no cuenta lesionados Out)
+    const out = [], inn = [];
+    if(useRosterFor(S.asOf) && S.rost.teams[team]){
+      const R = new Set(S.rost.teams[team]);
+      const playedTot = {};
+      for(const gid of ids) for(const o of (PL.byGame[gid]||[])) if(o.team===team) playedTot[o.r[PC.aid]] = (playedTot[o.r[PC.aid]]||0) + (pval(o.r,sk)||0);
+      for(const aid in playedTot) if(!R.has(aid)){ const c = playedTot[aid]/T.gp*share; if(c>0.05) out.push({ aid, contrib:c }); }
+      const injT = injuriesFor(g.id, team);
+      const fullSeason = Math.max(1, ...Object.values(teamLogs()).map(L=>L.length));
+      for(const aid of R){
+        if(playedTot[aid]!=null || isOut(injT[aid])) continue;
+        const L = (PL.by[aid]||[]).filter(o => !S.asOf || o.date < S.asOf);
+        if(!L.length) continue;                                   // novatos: sin historial, cuentan 0
+        const W = playerWindow(L);
+        const avail = Math.min(1, L.length / fullSeason);        // qué tanto jugó (lesiones, minutos)
+        const c = (pAvg(W, sk)||0) * avail * share;
+        if(c>0.05) inn.push({ aid, contrib:c, from: L.at(-1).team });
+      }
+      out.sort((x,y)=>y.contrib-x.contrib); inn.sort((x,y)=>y.contrib-x.contrib);
+    }
+    const net = (inn.reduce((s,x)=>s+x.contrib,0) - out.reduce((s,x)=>s+x.contrib,0)) * (1-rec);
+    return { d: lost*(1-rec) - net, lost, list, out, inn, net, inj: lost*(1-rec) };
+  };
+  const Hs = side(g.h.t,'H'), As = side(g.a.t,'A');
+  return { dH:Hs.d, dA:As.d, h:Hs, a:As, rec };
+}
+function adjNote(P, h, a){
+  const ad = P.adj; if(!ad) return '';
+  const names = (arr, n=2) => arr.slice(0,n).map(x=>`${aName(x.aid)} ${fmt(x.contrib)}`).join(', ') + (arr.length>n?'…':'');
+  const sgn = v => (v>0?'+':v<0?'−':'±') + fmt(Math.abs(v));
+  const inj = (t, sd) => sd.list.length ? `${badge(t)} −${fmt(sd.inj)} <span class="note">(${names(sd.list,3)})</span>` : '';
+  const ros = (t, sd) => (sd.out?.length || sd.inn?.length) ? `${badge(t)} ${sgn(sd.net)} <span class="note">(${sd.out.length?`salieron: ${names(sd.out)}`:''}${sd.out.length&&sd.inn.length?' · ':''}${sd.inn.length?`llegaron: ${names(sd.inn)}`:''})</span>` : '';
+  const r1 = [inj(a,ad.a), inj(h,ad.h)].filter(Boolean), r2 = [ros(a,ad.a), ros(h,ad.h)].filter(Boolean);
+  if(!r1.length && !r2.length) return '';
+  return `<div class="meta adjnote">
+    ${r2.length ? `<span>Plantilla nueva (resto recupera ${Math.round(ad.rec*100)}%): ${r2.join(' · ')}</span>` : ''}
+    ${r1.length ? `<span>Bajas: ${r1.join(' · ')}</span>` : ''}
+  </div>`;
+}
+
+// ---------- en vivo: tiempo, cuartos, racha y jugadas ----------
+const CORE = qs.get('core') || 'https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba';
+// Segundos de juego transcurridos al momento de una jugada (cuartos de 12', tiempos extra de 5')
+const playSec = (period, clockSec) => period <= 4 ? (period-1)*720 + (720 - clockSec) : 2880 + (period-5)*300 + (300 - clockSec);
+async function fetchPlays(gid){
+  try{
+    let page = 1, out = [], pages = 1;
+    do{
+      const j = await fetch(`${CORE}/events/${gid}/competitions/${gid}/plays?limit=1000&page=${page}`).then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); });
+      pages = j.pageCount || 1;
+      for(const p of j.items||[]){
+        const tid = (String(p.team?.$ref||'').match(/teams\/(\d+)/)||[])[1] || null;
+        out.push({ text:p.text||'', h:p.homeScore, a:p.awayScore, per:p.period?.number||1, clk:p.clock?.displayValue||'', cs:Number(p.clock?.value)||0,
+          sc:!!p.scoringPlay, v:Number(p.scoreValue)||0, tid, seq:Number(p.sequenceNumber)||0 });
+      }
+      page++;
+    } while(page <= pages && page <= 3);
+    out.sort((x,y)=>x.seq-y.seq);
+    S.plays[gid] = { list: out, ts: Date.now() };
+  }catch(e){ S.plays[gid] = { list: [], ts: Date.now(), err: e.message || 'sin acceso' }; }
+  return S.plays[gid];
+}
+function liveStripHTML(g, db){
+  const hq = db ? db.h.q : g.h.q, aq = db ? db.a.q : g.a.q;
+  if(!(hq && hq.length)) return '';
+  const nP = Math.max(hq.length, aq?.length||0, 4);
+  const lab = i => i<4 ? `Q${i+1}` : `OT${i-3>1?i-3:''}`;
+  const el = elapsedMin(g); const total = Math.max(48, 48 + 5*Math.max(0, (g.period||4)-4));
+  const pct = g.state==='in' && el!=null ? Math.min(100, 100*el/total) : (db||g.state==='post') ? 100 : 0;
+  const sum = q => (q||[]).reduce((s,x)=>s+(x||0),0);
+  return `<div class="livestrip">
+    <div class="ls-time">${g.state==='in' ? `<b>${g.period<=4?'Q'+g.period:'OT'+(g.period-4>1?g.period-4:'')} · ${g.clock||''}</b> <span class="note">${fmt(el,1)}' jugados de ${total}</span>` : `<b>Final</b>`}
+      <div class="ls-bar"><span style="width:${pct}%"></span></div></div>
+    <table class="ls-q"><thead><tr><th class="note" title="Marcador de puntos por cuarto">${S.metric==='pts'?'':'Pts'}</th>${Array.from({length:nP},(_,i)=>`<th class="n">${lab(i)}</th>`).join('')}<th class="n">T</th></tr></thead><tbody>
+      <tr><td>${g.a.t}</td>${Array.from({length:nP},(_,i)=>`<td class="n">${aq?.[i] ?? ''}</td>`).join('')}<td class="n"><b>${sum(aq)}</b></td></tr>
+      <tr><td>${g.h.t}</td>${Array.from({length:nP},(_,i)=>`<td class="n">${hq?.[i] ?? ''}</td>`).join('')}<td class="n"><b>${sum(hq)}</b></td></tr>
+    </tbody></table></div>`;
+}
+function playsAnalysis(g, list){
+  const sc = list.filter(p=>p.sc && p.v>0);
+  if(!sc.length) return null;
+  const side = tid => tid===g.h.tid ? 'h' : tid===g.a.tid ? 'a' : null;
+  // racha: puntos seguidos del último equipo que anotó, sin respuesta del rival
+  const last = side(sc.at(-1).tid); let run = 0, i = sc.length-1;
+  while(i>=0 && side(sc[i].tid)===last){ run += sc[i].v; i--; }
+  const startP = sc[i+1], lastP = list.at(-1);
+  const runDur = Math.max(0, playSec(lastP.per, lastP.cs) - playSec(startP.per, startP.cs));
+  // parcial últimos 5 minutos de juego
+  const now = playSec(lastP.per, lastP.cs), from = now - 300;
+  const p5 = { h:0, a:0 }; for(const p of sc){ if(playSec(p.per,p.cs) > from){ const s2 = side(p.tid); if(s2) p5[s2]+=p.v; } }
+  // racha más grande del partido
+  let best = { pts:0, s:null }, cur = { pts:0, s:null };
+  for(const p of sc){ const s2 = side(p.tid); if(s2===cur.s) cur.pts+=p.v; else cur = { pts:p.v, s:s2 }; if(cur.pts>best.pts) best = { ...cur }; }
+  // serie para la gráfica: ventaja del local
+  const series = list.filter(p=>p.h!=null && p.a!=null).map(p=>({ x: playSec(p.per,p.cs)/60, y: p.h - p.a }));
+  return { run:{ s:last, pts:run, dur:runDur }, p5, best, series, recent: list.filter(p=>p.text).slice(-8).reverse() };
+}
+function marginChart(series, g){
+  if(series.length<2) return '';
+  const W=320,H=90,pl=26,pr=6,pt=6,pb=16;
+  const xm = Math.max(48, Math.ceil(series.at(-1).x)); const ym = Math.max(6, ...series.map(p=>Math.abs(p.y)));
+  const X = x => pl + (W-pl-pr)*x/xm, Y = y => pt + (H-pt-pb)*(1 - (y+ym)/(2*ym));
+  const d = series.map((p,i)=>`${i?'L':'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" class="hchart" role="img" aria-label="Ventaja en el partido">
+    ${[12,24,36,48].map(t=>`<line x1="${X(t)}" x2="${X(t)}" y1="${pt}" y2="${H-pb}" class="gridl"/><text x="${X(t)}" y="${H-4}" text-anchor="middle">${t}'</text>`).join('')}
+    <line x1="${pl}" x2="${W-pr}" y1="${Y(0)}" y2="${Y(0)}" class="prel"/>
+    <text x="${pl-4}" y="${Y(ym)+8}" text-anchor="end">${g.h.t}</text><text x="${pl-4}" y="${Y(-ym)}" text-anchor="end">${g.a.t}</text>
+    <path d="${d}" class="linel"/></svg>`;
+}
+function pbpHTML(g, key){
+  if(g.manual || g.state==='pre') return '';
+  const k = key+'|pbp', o = S.open[k];
+  const head = `<details class="det pbp" data-open="${k}" data-gid="${g.id}" ${o?'open':''}><summary>Racha y jugadas${g.state==='in'?' (en vivo)':''}</summary>`;
+  if(!o) return head + '</details>';
+  const P = S.plays[g.id];
+  if(!P) return head + '<div class="note" style="margin-top:6px">Cargando jugadas…</div></details>';
+  if(P.err) return head + `<div class="note" style="margin-top:6px">ESPN no entregó la jugada por jugada (${P.err}).</div></details>`;
+  const A = playsAnalysis(g, P.list);
+  if(!A) return head + '<div class="note" style="margin-top:6px">Todavía no hay anotaciones.</div></details>';
+  const tn = s => s==='h' ? g.h.t : g.a.t;
+  const mm = sec => `${Math.floor(sec/60)}:${String(Math.round(sec%60)).padStart(2,'0')}`;
+  return head + `
+    <div class="kpis" style="margin:8px 0 6px">
+      <div class="kpi"><div class="k">Racha actual</div><div class="big" style="font-size:18px">${badge(tn(A.run.s))} ${A.run.pts}-0</div><div class="note">en ${mm(A.run.dur)} de juego</div></div>
+      <div class="kpi"><div class="k">Últimos 5 min</div><div class="big" style="font-size:18px">${g.a.t} ${A.p5.a} · ${g.h.t} ${A.p5.h}</div></div>
+      <div class="kpi"><div class="k">Mayor racha</div><div class="big" style="font-size:18px">${badge(tn(A.best.s))} ${A.best.pts}-0</div></div>
+    </div>
+    ${marginChart(A.series, g)}
+    <table class="pbp-t"><tbody>${A.recent.map(p=>`<tr class="${p.sc?'scp':''}"><td class="note">${p.per<=4?'Q'+p.per:'OT'} ${p.clk}</td><td>${p.text}</td><td class="n">${p.a}-${p.h}</td></tr>`).join('')}</tbody></table>
+    <div class="note">Marcador visita-local. ${g.state==='in'?'Se actualiza cada minuto mientras esté abierto.':''}</div></details>`;
+}
+
+// ---------- panel en vivo ----------
+function livePanelHTML(LV, m, line, g, key){
+  const pct = x => x==null ? '—' : x >= 0.995 ? '99%+' : x <= 0.005 ? '<1%' : Math.round(x*100)+'%';
+  const segTxt = LV.seg>48 ? 'partido + tiempo extra' : LV.seg===48 ? 'partido' : LV.seg===24 ? '1a mitad' : '1er cuarto';
+  const fair = Math.floor(LV.proj) + 0.5; // línea con .5 más cercana a la proyección (la que deja ~50/50)
+  const L = line===''?null:Number(line);
+  let vsLine = '';
+  if(L!=null && LV.rem <= 0){
+    vsLine = `<div class="lp-row"><span class="k">Contra ${fmt(L)}</span><span class="pill ${LV.cur>L?'over':'under'}">${LV.cur>L?'OVER':LV.cur<L?'UNDER':'PUSH'}</span></div>`;
+  } else if(L!=null){
+    const pO = LV.pAt(L), need = Math.floor(L) + 1 - LV.cur;
+    const reqPace = LV.rem>0 && need>0 ? need/LV.rem*Math.min(LV.seg,48) : null;
+    vsLine = `<div class="lp-row"><span class="k">Contra ${fmt(L)}</span>
+      <span class="pill over">OVER ${pct(pO)}</span><span class="pill under">UNDER ${pct(1-pO)}</span>
+      <span class="note">${need<=0 ? '<b style="color:var(--over)">ya pasó la línea</b>' : `faltan <b>${need}</b> en ${fmt(LV.rem,1)}' · ritmo necesario <b>${fmt(reqPace)}</b> vs actual <b>${fmt(LV.pace)}</b>`}</span></div>`;
+  }
+  const myPicks = S.picks.filter(p=>p.id===g.id && p.metric===S.metric);
+  const picksTxt = myPicks.length ? `<div class="lp-row"><span class="k">Tus picks</span>${myPicks.map(p=>{ const pO = LV.pAt(p.line), pw = p.pick==='OVER' ? pO : 1-pO;
+      return `<span class="pill ${p.pick==='OVER'?'over':'under'}">${p.pick} ${fmt(p.line)}${p.phase==='vivo'?' (vivo)':''}: ${pct(pw)} de acertar</span>`; }).join(' ')}</div>` : '';
+  return `<div class="livepanel">
+    <div class="proj liveproj">
+      <div><div class="k">Acumulado · ${m.label.toLowerCase()}</div><div class="big">${LV.cur}</div></div>
+      <div><div class="k">Tiempo (${segTxt})</div><div class="big" style="font-size:16px">${fmt(LV.el,1)}' / ${LV.seg}'</div><div class="ls-bar"><span style="width:${Math.min(100,100*LV.el/LV.seg)}%"></span></div></div>
+      <div><div class="k">Proy. final</div><div class="big">${fmt(LV.proj)}</div></div>
+    </div>
+    ${LV.rem <= 0 ? `<div class="lp-row"><span class="k">Terminado</span><span>${LV.seg===24?'la':'el'} ${segTxt} terminó con <b>${LV.cur}</b></span></div>`
+      : `<div class="lp-row"><span class="k">Se ajusta mejor</span><span>línea justa ahora <b>${fmt(fair)}</b> · rango probable (8 de 10) <b>${fmt(LV.lo,0)}–${fmt(LV.hi,0)}</b> · ritmo actual <b>${fmt(LV.pace)}</b> por ${Math.min(LV.seg,48)}'</span></div>`}
+    ${vsLine}${picksTxt}
+  </div>`;
+}
+
+// ---------- momios ----------
+// Acepta americano (-115, +105, 120) o decimal (1.91). Devuelve el momio decimal o null.
+function oddsDec(raw){
+  if(raw==null) return null;
+  const t = String(raw).trim().replace(',', '.');
+  if(!t) return null;
+  const n = Number(t);
+  if(!Number.isFinite(n)) return null;
+  if(/^[+-]/.test(t) || Math.abs(n) >= 100){
+    if(Math.abs(n) < 100) return null;
+    return n > 0 ? 1 + n/100 : 1 + 100/(-n);
+  }
+  return n > 1 ? n : null;
+}
+// Valor esperado por unidad apostada y probabilidad que necesitas para empatar
+function valueOf(p, dec){ return (p==null || !dec) ? null : { ev: p*dec - 1, need: 1/dec }; }
+function valueHTML(E, key){
+  const od = S.odds[key]; if(!od || E.pOver==null) return '';
+  const dO = oddsDec(od.o), dU = oddsDec(od.u);
+  if(!dO && !dU) return '';
+  const vO = valueOf(E.pOver, dO), vU = valueOf(1-E.pOver, dU);
+  const best = [['OVER',vO],['UNDER',vU]].filter(x=>x[1]).sort((a,b)=>b[1].ev-a[1].ev)[0];
+  const vig = dO && dU ? (1/dO + 1/dU - 1) : null;
+  const part = (lbl, v, p) => v ? `<span>${lbl}: necesitas <b>${Math.round(v.need*100)}%</b>, modelo <b>${Math.round(p*100)}%</b> → <b style="color:${v.ev>0?'var(--over)':'var(--under)'}">${v.ev>0?'+':''}${(v.ev*100).toFixed(1)}%</b></span>` : '';
+  return `<div class="meta valrow">
+    ${best && best[1].ev>0 ? `<span class="pill ${best[0]==='OVER'?'over':'under'}">VALOR ${best[0]} +${(best[1].ev*100).toFixed(1)}%</span>` : '<span class="pill">SIN VALOR</span>'}
+    ${part('Over', vO, E.pOver)} ${part('Under', vU, 1-E.pOver)}
+    ${vig!=null?`<span class="note">comisión de la casa ${(vig*100).toFixed(1)}%</span>`:''}
+  </div>`;
+}
+
+// ---------- render: partidos ----------
+const carryTxt = T => { const p = (T.logs||[]).filter(x=>x.prev).length; return p ? `${T.gp-p}+${p}` : T.gp; };
+const restTag = c => c && c!=='2+' ? `<span class="tagrest ${c==='b2b'?'b2b':''}" title="Días de descanso antes de este partido">${REST_LBL[c]}</span>` : '';
+const sgn = (v, d=1) => v==null ? '—' : (v>=0?'+':'') + Number(v).toFixed(d);
+function marketOf(g, db){
+  return g.mk || db?.mk || S.slateFile.find(x=>x.id===g.id)?.mk || null;
+}
+// Las dos proyecciones juntas: Promedios (tu hoja) y Mixto, y si coinciden contra la línea
+function compareHTML(P, g, h, a, line){
+  if(P.proj==null) return '';
+  const cur = S.model, other = (cur==='avg' || cur==='pace') ? 'mix' : 'avg';
+  const sv = S.model; S.model = other;
+  let Q; try{ Q = project(h, a, line===''?null:line, null, g); } finally { S.model = sv; }
+  if(Q.proj==null || (other!=='avg' && !Q.plm) || ((cur==='mix' || cur==='players') && !P.plm)) return '';
+  const A = cur==='avg' ? P : Q, M = cur==='avg' ? Q : (cur==='mix' ? P : Q);
+  const gap = M.proj - A.proj, L = line===''||line==null ? null : Number(line);
+  let verdict = '';
+  if(L!=null){
+    // "coinciden" solo si los dos quedan del mismo lado con margen (≈1% de la línea, 2.3 en puntos); si no, es parejo
+    const thr = Math.max(0.5, 0.01*L), side = v => v - L >= thr ? 'OVER' : L - v >= thr ? 'UNDER' : null;
+    const sa = side(A.proj), sm = side(M.proj), ra = A.proj > L ? 'OVER' : 'UNDER', rm = M.proj > L ? 'OVER' : 'UNDER';
+    verdict = sa && sa===sm ? `<span class="pill ${sa==='OVER'?'over':'under'}">✓ los dos: ${sa}</span>`
+      : ra !== rm ? `<span class="pill warn">⚠ no coinciden</span>`
+      : `<span class="pill">parejo · uno queda a menos de ${fmt(thr)} de la línea</span>`;
+  } else verdict = Math.abs(gap) >= 6 ? '<span class="pill warn">⚠ se separan</span>' : Math.abs(gap) <= 3 ? '<span class="note">coinciden</span>' : '';
+  return `<div class="cmp"><span class="k">Comparación</span>
+    <span>Promedios <b>${fmt(A.proj)}</b>${L!=null?` <span class="note">(${sgn(A.proj-L)})</span>`:''}</span>
+    <span>Mixto <b>${fmt(M.proj)}</b>${L!=null?` <span class="note">(${sgn(M.proj-L)})</span>`:''}</span>
+    <span class="note">diferencia ${sgn(gap)}${Math.abs(gap)>=6?' · revisa Alineaciones':''}</span> ${verdict}</div>`;
+}
+function modelNote(P, g, db, h, a, m){
+  if(P.proj==null) return '';
+  const bits = [];
+  if(P.plm){ const src = { prob:'titulares probables y lesionados', vivo:'alineación en vivo', real:'los que jugaron' }[P.plm.h.source];
+    bits.push(`<span>${P.plm.mix?'Mitad promedios, mitad jugadores · ':''}Por jugadores: ${a} <b>${fmt(P.plm.a.f)}</b> (${P.plm.a.n} jug.) · ${h} <b>${fmt(P.plm.h.f)}</b> (${P.plm.h.n} jug.) <span class="note">· ${src}; detalle en Alineaciones</span></span>`); }
+  else if(S.model==='players' || S.model==='mix') bits.push(`<span class="note">Modelo por jugadores: ${plFor(S.season) ? 'sin datos de jugadores para este cruce; se usa el de promedios.' : 'cargando jugadores…'}</span>`);
+  if(P.pm) bits.push(`<span>Ritmo esperado <b>${fmt(P.pm.pace)}</b> posesiones <span class="note">(${a} ${fmt(P.pm.pa.pace)} · ${h} ${fmt(P.pm.ph.pace)} · liga ${fmt(P.pm.lg.pace)})</span></span>`);
+  else if(S.model==='pace') bits.push(`<span class="note">Sin datos de posesiones: se usa el modelo de promedios.</span>`);
+  if(P.early) bits.push(`<span>Inicio de temporada: <b>${sgn(P.early.per)}</b> por equipo <span class="note">(al inicio se anota más: en ${S.season-2}-${String(S.season-1).slice(2)} el 1er mes fue ${sgn(P.early.d)}; aplica ${Math.round(P.early.w*100)}%, baja a 0 al llegar a ${CARRY} juegos)</span></span>`);
+  if(P.rest && (Math.abs(P.rest.dH)>=0.05 || Math.abs(P.rest.dA)>=0.05))
+    bits.push(`<span>Descanso: ${a} ${REST_LBL[P.rest.rA]} <b>${sgn(P.rest.dA)}</b> · ${h} ${REST_LBL[P.rest.rH]} <b>${sgn(P.rest.dH)}</b></span>`);
+  const mk = S.metric==='pts' ? marketOf(g, db) : null;
+  if(mk && mk.ou!=null){
+    const line = S.lines[lineKey(g.id)];
+    const fav = mk.det ? mk.det : mk.sp!=null && mk.sp!==0 ? (mk.sp<0 ? `${h} ${mk.sp}` : `${a} ${-mk.sp}`) : null;
+    bits.push(`<span>Mercado${mk.p?` (${mk.p})`:''}: total <b>${fmt(mk.ou)}</b>${fav?` · spread ${fav}`:''} · tu proy. <b>${sgn(P.proj - mk.ou)}</b>${line!=null?` · Playdoit ${fmt(line)} (${sgn(line - mk.ou)})`:''}</span>`);
+  }
+  return bits.length ? `<div class="mkt">${bits.join('')}</div>` : '';
+}
+const lineKey = (id, m=S.metric) => `${id}|${m}`;
+function finalFromDB(id){ return S.games.find(g=>g.id===id); }
+let _rendering = false, _again = false;
+function renderCards(){
+  if(_rendering){ _again = true; return; }   // evita re-dibujar dentro de otro dibujado (blur → change)
+  _rendering = true;
+  try{
+    do { _again = false; S.asOf = $('slateDate').value || null; try{ renderCardsInner(); } finally { S.asOf = null; } } while(_again);
+  } finally { _rendering = false; }
+}
+function renderCardsInner(){
+  const m = METRICS[S.metric];
+  const list = [...S.live.map(x=>({...x, manual:false})),
+    ...S.manual.map((x,i)=>({ id:`M${i}-${x.h}-${x.a}`, h:{t:x.h,st:{}}, a:{t:x.a,st:{}}, state:'manual', manual:true, idx:i }))];
+  if(!S.games.length && !list.length){
+    $('cards').innerHTML = `<div class="empty"><h3>Aún no hay datos</h3>La temporada regular 2026-27 arranca el 20 de octubre. Mientras, puedes correr el backfill de la temporada pasada desde GitHub Actions (ver README) para probar.</div>`;
+    return;
+  }
+  if(!list.length){ $('cards').innerHTML = `<div class="empty"><h3>Sin partidos esta fecha</h3>Cambia la fecha o agrega un cruce manual arriba.</div>`; return; }
+  $('cards').innerHTML = list.map(g => {
+    const h=g.h.t, a=g.a.t, key=lineKey(g.id), line=S.lines[key] ?? '';
+    const P = project(h, a, line===''?null:line, lineupAdj(g), g);
+    const db = finalFromDB(g.id);
+    let curH=null, curA=null;
+    if(db){ curH=m.f(db.h); curA=m.f(db.a); }
+    else if(m.live && g.h.st && g.h.st[m.live]!=null && !Number.isNaN(g.h.st[m.live])){ curH=g.h.st[m.live]; curA=g.a.st[m.live]; }
+    const started = g.state==='in' || g.state==='post' || db;
+    const cur = (curH!=null && curA!=null && started) ? curH+curA : null;
+    const time = g.start ? new Date(g.start).toLocaleTimeString('es-MX',{hour:'numeric',minute:'2-digit'}) : '';
+    const head = g.manual ? `<span>Cruce manual</span><button data-rm="${g.idx}" style="min-height:24px;padding:0 8px">Quitar</button>`
+      : g.state==='in' ? `<span class="live">EN VIVO · ${g.detail||''}</span><span>${m.label}</span>`
+      : (g.state==='post'||db) ? `<span>Final</span><span>${m.label}</span>`
+      : `<span>${time} (tu hora)</span><span>${m.label}</span>`;
+    const seg = segFor(m, g);
+    const el = elapsedMin(g);
+    const LV = (g.state==='in' && m.live) ? liveProject(P, cur ?? 0, el, seg, line===''?null:line) : null;
+    const E = LV || P;  // evaluación vigente: en vivo si el juego está en curso
+    const phase = g.state==='in' ? 'vivo' : 'pre';
+    const pick = [...S.picks].reverse().find(p=>p.id===g.id && p.metric===S.metric && (p.phase||'pre')===phase);
+    const hist = S.hist[key] || [];
+    const sugPill = E.sug ? `<span class="pill ${E.sug==='OVER'?'over':'under'}">${E.sug} ${E.diff>0?'+':''}${fmt(E.diff)}</span>` : '<span class="note">Pon la línea →</span>';
+    const scoreH = g.state!=='pre' && g.state!=='manual' ? (db?db.h.pts:g.h.st.points) : '';
+    const scoreA = g.state!=='pre' && g.state!=='manual' ? (db?db.a.pts:g.a.st.points) : '';
+    // columna derecha: el parámetro elegido de cada equipo; si no es Puntos, el marcador va chico abajo
+    const sCell = (v, sc) => sc==='' || sc==null ? '' : S.metric==='pts' || !started ? sc
+      : `${v!=null && !Number.isNaN(v) ? v : '—'}<small class="sc">${sc} pts</small>`;
+    let curCls='';
+    if(cur!=null && line!==''){ curCls = cur>Number(line)?'style="color:var(--over)"':(g.state==='post'||db)&&cur<Number(line)?'style="color:var(--under)"':''; }
+    return `<article class="card" data-id="${g.id}" data-h="${h}" data-a="${a}">
+      <div class="gh">${head}</div>
+      <div class="teams">
+        <div class="tm">${badge(a)} ${tname(a)} <small>visita</small>${restTag(P.rest?.rA)}</div><div class="v">${fmt(P.A.f,1)} / ${fmt(P.A.c,1)}</div><div class="s">${sCell(curA, scoreA)}</div>
+        <div class="tm">${badge(h)} ${tname(h)} <small>local</small>${restTag(P.rest?.rH)}</div><div class="v">${fmt(P.H.f,1)} / ${fmt(P.H.c,1)}</div><div class="s">${sCell(curH, scoreH)}</div>
+      </div>
+      <div class="meta" style="padding-top:0"><span>a favor / en contra · ${m.label.toLowerCase()} · GP ${carryTxt(P.A)}/${carryTxt(P.H)}</span>${(P.A.logs||[]).some(x=>x.prev)||(P.H.logs||[]).some(x=>x.prev)?`<span class="note">(+ juegos de ${S.season-2}-${String(S.season-1).slice(2)} mientras llevan menos de ${CARRY})</span>`:''}</div>
+      <div class="proj">
+        <div><div class="k">${P.proj!=null && Math.abs(P.base-P.proj)>=0.05 ? 'Proy. ajustada' : 'Proyección total'}</div><div class="big">${fmt(P.proj)}</div>${P.proj!=null && Math.abs(P.base-P.proj)>=0.05 ? `<div class="note">base ${fmt(P.base)}</div>`:''}</div>
+        <div><div class="k">Proy. ${a} · ${h}</div><div class="big" style="font-size:15px;white-space:nowrap">${fmt(P.aProj)} · ${fmt(P.hProj)}</div></div>
+        <div><div class="k">${g.state==='in'?'Actual':'Real'}</div><div class="big" ${curCls}>${cur!=null?cur:'—'}</div></div>
+      </div>
+      ${compareHTML(P, g, h, a, line)}
+      ${modelNote(P, g, db, h, a, m)}
+      ${(g.state==='in' || g.state==='post' || db) && !g.manual ? liveStripHTML(g, db) : ''}
+      ${adjNote(P, h, a)}
+ ${LV ? livePanelHTML(LV, m, line, g, key) : (g.state==='in' && !m.live ? `<div class="meta" style="padding-top:8px">ESPN no da ${m.label.toLowerCase()} en vivo en el marcador; la proyección es la previa.</div>` : '')}
+      <div class="lineRow">
+        <span class="k">${g.state==='in'?'Línea en vivo':'Línea'}</span><input type="number" step="0.5" class="lineIn" value="${line}" placeholder="—" data-moment="${momentLabel(g)}" data-min="${el??0}">
+        ${sugPill}
+        <span class="odds"><span class="k">Momio</span>
+          <input type="text" inputmode="decimal" class="oddsIn${S.odds[key]?.o && !oddsDec(S.odds[key].o)?' bad':''}" data-side="o" value="${S.odds[key]?.o ?? ''}" placeholder="O" title="Momio del OVER: -115, +105 o 1.91">
+          <input type="text" inputmode="decimal" class="oddsIn${S.odds[key]?.u && !oddsDec(S.odds[key].u)?' bad':''}" data-side="u" value="${S.odds[key]?.u ?? ''}" placeholder="U" title="Momio del UNDER: -105, +100 o 1.95">
+        </span>
+        <div class="pick">
+          <button class="o ${pick?.pick==='OVER'?'sel':''}" data-pick="OVER">OVER</button>
+          <button class="u ${pick?.pick==='UNDER'?'sel':''}" data-pick="UNDER">UNDER</button>
+        </div>
+      </div>
+      ${E.sug ? valueHTML(E, key) : ''}
+      ${E.sug ? `<div class="meta">
+        <span>Prob. over aprox <b>${E.pOver!=null?Math.round(E.pOver*100)+'%':'—'}</b></span>
+        ${LV ? '' : `
+        <span>${a} pasó la línea <b>${P.aOver!=null?Math.round(P.aOver*100)+'%':'—'}</b> (${P.aN})</span>
+        <span>${h} <b>${P.hOver!=null?Math.round(P.hOver*100)+'%':'—'}</b> (${P.hN})</span>`}
+      </div>`:''}
+      ${hist.length ? `<details class="hist" ${S.openHist?.[key]?'open':''} data-key="${key}"><summary>Movimiento de línea (${hist.length})</summary>
+        ${histChart(hist, P.proj, seg, (g.state==='post'||db) ? cur : null)}
+        <div class="legend"><span class="lg-line">línea</span><span class="lg-proj">proy. en vivo</span><span class="lg-pre">proy. previa</span>${(g.state==='post'||db)?'<span class="lg-fin">real</span>':''}</div>
+        <table class="htab"><thead><tr><th>Momento</th><th class="n">Línea</th><th class="n">Actual</th><th class="n">Proy.</th><th class="n">P(over)</th><th class="n">Momio O/U</th><th></th></tr></thead><tbody>
+        ${hist.map((x,i)=>`<tr><td>${x.label}</td><td class="n">${fmt(x.line)}</td><td class="n">${x.cur??'—'}</td><td class="n">${fmt(x.proj)}</td><td class="n">${x.pOver!=null?Math.round(x.pOver*100)+'%':'—'}</td><td class="n">${x.oO||x.oU?`${x.oO||'—'} / ${x.oU||'—'}`:'—'}</td><td><button data-hdel="${i}" class="mini">✕</button></td></tr>`).join('')}
+        </tbody></table></details>` : ''}
+      ${pbpHTML(g, key)}
+      ${h2hHTML(g, key, line, S.asOf)}
+      ${lineupHTML(g, key)}
+    </article>`;
+  }).join('');
+}
+$('cards').addEventListener('change', e => {
+  if(e.target.classList.contains('oddsIn')){
+    const card = e.target.closest('.card'), key = lineKey(card.dataset.id), side = e.target.dataset.side;
+    const v = e.target.value.trim();
+    const o = { ...(S.odds[key] || {}) };
+    if(v==='') delete o[side]; else o[side] = v;
+    if(Object.keys(o).length) S.odds[key] = o; else delete S.odds[key];
+    store.set('odds', S.odds);
+    if(S.lines[key]!=null) logLine(card, key, S.lines[key]);   // queda en el historial junto con la línea
+    Sync.saveLine(key);
+    renderCards();
+    return;
+  }
+  if(!e.target.classList.contains('lineIn')) return;
+  const card = e.target.closest('.card'); const v = e.target.value;
+  const key = lineKey(card.dataset.id);
+  if(v==='') delete S.lines[key]; else S.lines[key] = Number(v);
+  store.set('lines', S.lines);
+  if(v!==''){ logLine(card, key, Number(v)); }
+  Sync.saveLine(key);
+  renderCards();
+});
+// Guarda cada línea capturada con el momento del partido y la evaluación en ese instante
+function evalCard(card, line){
+  const g = cardGame(card); const m = METRICS[S.metric];
+  S.asOf = $('slateDate').value || null; const P = project(card.dataset.h, card.dataset.a, line, lineupAdj(g), g || { id:card.dataset.id }); S.asOf = null;
+  let cur = null;
+  if(g && g.state==='in' && m.live && g.h.st[m.live]!=null) cur = g.h.st[m.live] + g.a.st[m.live];
+  const el = g ? elapsedMin(g) : null;
+  const LV = (g && g.state==='in' && m.live) ? liveProject(P, cur ?? 0, el, segFor(m, g), line) : null;
+  return { g, P, LV, cur, el, E: LV || P };
+}
+function cardGame(card){ return S.live.find(x=>x.id===card.dataset.id) || null; }
+function logLine(card, key, line){
+  const { g, LV, P, cur, el, E } = evalCard(card, line);
+  const od = S.odds[key] || {};
+  const entry = { ts:Date.now(), min: el ?? 0, label: g ? momentLabel(g) : 'Pre', line, cur: g?.state==='in' ? cur : null,
+    proj: E.proj!=null ? +E.proj.toFixed(2) : null, pOver: E.pOver!=null ? +E.pOver.toFixed(3) : null,
+    oO: od.o || null, oU: od.u || null };
+  const H = (S.hist[key] ||= []);
+  const last = H.at(-1);
+  if(last && last.label===entry.label && Math.abs(last.min-entry.min)<0.5) H[H.length-1] = entry; else H.push(entry);
+  store.set('hist', S.hist);
+}
+$('cards').addEventListener('toggle', async e => {
+  const d = e.target; if(d.tagName!=='DETAILS') return;
+  if(d.classList.contains('hist')){ (S.openHist ||= {})[d.dataset.key] = d.open; return; }
+  const k = d.dataset.open; if(!k) return;
+  const was = !!S.open[k]; S.open[k] = d.open;
+  if(d.classList.contains('pbp') && d.open && !was){
+    await fetchPlays(d.dataset.gid); renderCards(); return;
+  }
+  if(d.classList.contains('lu') && d.open && !was){
+    const gid = d.dataset.gid, lv = S.live.find(x=>x.id===gid);
+    await Promise.all([ ensurePlayers(S.season), lv && lv.state!=='post' && !S.sum[gid] ? fetchSummary(gid) : null ]);
+    renderCards();
+  }
+}, true);
+$('cards').addEventListener('click', e => {
+  const hd = e.target.dataset.hdel;
+  if(hd!=null){ const key = lineKey(e.target.closest('.card').dataset.id); S.hist[key].splice(Number(hd),1); if(!S.hist[key].length) delete S.hist[key]; store.set('hist',S.hist); Sync.saveLine(key); renderCards(); return; }
+  const rm = e.target.dataset.rm;
+  if(rm!=null){ S.manual.splice(Number(rm),1); store.set('manual',S.manual); Sync.saveManual(); renderCards(); return; }
+  const pk = e.target.dataset.pick; if(!pk) return;
+  const card = e.target.closest('.card'); const id = card.dataset.id;
+  const line = S.lines[lineKey(id)];
+  if(line==null){ card.querySelector('.lineIn').focus(); return; }
+  const { g, E, cur } = evalCard(card, line);
+  const phase = g?.state==='in' ? 'vivo' : 'pre';
+  const i = phase==='pre' ? S.picks.findIndex(p=>p.id===id && p.metric===S.metric && (p.phase||'pre')==='pre') : -1;
+  if(i>=0 && S.picks[i].pick===pk){ Sync.deletePick(pickId(S.picks[i])); S.picks.splice(i,1); }
+  else {
+    const od = S.odds[lineKey(id)] || {}, oddsRaw = pk==='OVER' ? od.o : od.u, dec = oddsDec(oddsRaw);
+    const pSide = E.pOver!=null ? (pk==='OVER' ? E.pOver : 1-E.pOver) : null;
+    const rec = { uid: Date.now().toString(36), id, date:$('slateDate').value, metric:S.metric, h:card.dataset.h, a:card.dataset.a, line, pick:pk,
+      odds: dec ? oddsRaw : null, dec: dec ? +dec.toFixed(4) : null, ev: dec && pSide!=null ? +(pSide*dec-1).toFixed(4) : null,
+      phase, moment: g ? momentLabel(g) : 'Pre', curAtPick: phase==='vivo' ? cur : null,
+      proj: E.proj!=null?+E.proj.toFixed(2):null, sug:E.sug||null, created:new Date().toISOString(),
+      stake: Number(S.stake) > 0 ? Number(S.stake) : null, pSide: pSide!=null ? +pSide.toFixed(3) : null, start: g?.start || null,
+      sig: (E.sdR ?? E.sig) != null ? +(E.sdR ?? E.sig).toFixed(3) : null };
+    if(i>=0){ Sync.deletePick(pickId(S.picks[i])); S.picks[i]=rec; } else S.picks.push(rec);
+    Sync.savePick(rec);
+  }
+  store.set('picks', S.picks); renderCards();
+});
+
+// ---------- render: equipos ----------
+function renderEquipos(){
+  const m = METRICS[S.metric];
+  const teams = Object.keys(teamLogs());
+  $('eqSub').textContent = `${m.label} · ${S.stat==='median'?'mediana':'promedio'} por juego · ${Number(S.win)?'últimos '+S.win:'toda la temporada'}. "Total" = a favor + en contra (el HTGA/VTGA de tu hoja). Ritmo = posesiones por partido; /100 = por cada 100 posesiones.`;
+  if(!teams.length){ $('eqTable').innerHTML = '<tr><td class="empty">Sin datos todavía.</td></tr>'; return; }
+  const rows = teams.map(t => {
+    const all = teamStats(t, null), home = (()=>{ const sv=S.split; S.split='ha'; const r=teamStats(t,'H'); S.split=sv; return r; })(),
+          away = (()=>{ const sv=S.split; S.split='ha'; const r=teamStats(t,'A'); S.split=sv; return r; })();
+    const r = { t, gp:all.gp, f:all.f, c:all.c, tot:all.tot, sd:all.sd, home:home.tot, away:away.tot };
+    if(S.metric==='ast'){ const T=teamStats(t,null,'to'); r.to=T.f; r.ato = T.f? all.f/T.f : null; }
+    const pc = paceOf(all.logs, m.f); if(pc){ r.pace = pc.pace; r.o100 = pc.off*100; r.d100 = pc.def*100; }
+    return r;
+  });
+  const cols = [['t','Equipo'],['gp','GP'],['f','A favor'],['c','En contra'],['tot','Total'],['sd','Desv.'],['home','Total local'],['away','Total visita']];
+  if(S.metric==='ast') cols.push(['to','TO/G'],['ato','A/TO']);
+  cols.push(['pace','Ritmo'],['o100','A favor /100'],['d100','En contra /100']);
+  const [sk, dir] = S.eqSort;
+  rows.sort((x,y)=> sk==='t' ? dir*x.t.localeCompare(y.t) : dir*((x[sk]??-1e9)-(y[sk]??-1e9)));
+  const maxTot = Math.max(...rows.map(r=>r.tot||0)), minTot = Math.min(...rows.map(r=>r.tot||1e9));
+  const dec = k => k==='gp'?0 : k==='ato'?2 : 1;
+  $('eqTable').innerHTML = `<thead><tr><th class="n">#</th>${cols.map(([k,l])=>`<th data-k="${k}" class="${k==='t'?'':'n'} ${k===sk?'sorted'+(dir>0?' asc':''):''}">${l}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr><td class="n">${i+1}</td>${cols.map(([k])=> k==='t' ? `<td><span class="tm" style="font-size:14px">${badge(r.t)} ${tname(r.t)}</span></td>`
+      : k==='tot' ? `<td class="n"><b>${fmt(r.tot)}</b><span class="bar" style="width:${r.tot!=null&&maxTot>minTot?8+40*(r.tot-minTot)/(maxTot-minTot):0}px"></span></td>`
+      : `<td class="n">${fmt(r[k], dec(k))}</td>`).join('')}</tr>`).join('')}</tbody>`;
+}
+$('eqTable').addEventListener('click', e => {
+  const k = e.target.closest('th')?.dataset.k; if(!k) return;
+  S.eqSort = S.eqSort[0]===k ? [k, -S.eqSort[1]] : [k, k==='t'?1:-1];
+  store.set('eqSort', S.eqSort); renderEquipos();
+});
+
+// ---------- competencia entre usuarios ----------
+S.lgSort = store.get('lgSort', ['pct', -1]);
+function renderCompetencia(){
+  const sel = $('lgMetric');
+  if(!sel.options.length) sel.innerHTML = '<option value="">Todos</option>' + Object.entries(METRICS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+  if($('lgMin').value==='') $('lgMin').value = store.get('lgMin', 5);
+  const L = S.league;
+  if(!Sync.on){ $('lgTable').innerHTML = '<tr><td class="empty">Entra con Google (arriba a la derecha) con una cuenta aprobada para ver la competencia.</td></tr>'; $('lgFeed').innerHTML=''; $('lgNote').textContent=''; return; }
+  if(!L){ $('lgTable').innerHTML = '<tr><td class="empty">Cargando…</td></tr>'; $('lgFeed').innerHTML=''; return; }
+  $('lgNote').textContent = L.err ? `No se pudo leer: ${L.err}` : `Actualizado ${new Date(L.loaded).toLocaleTimeString('es-MX',{timeStyle:'short'})}`;
+  const days = Number($('lgRange').value), met = sel.value, minN = Number($('lgMin').value)||0;
+  const from = days ? addDays(etToday(), -days+1) : null;
+  const inRange = p => (!from || (p.date||'') >= from) && (!met || p.metric===met);
+  const rows = L.players.map(pl => {
+    // los publicados tarde no cuentan
+    const mine = L.picks.filter(p => p.uid===pl.uid && inRange(p) && !lateFlag(p)).map(p => ({ ...p, ...gradePick(p) }));
+    const g = mine.filter(p => p.res==='W' || p.res==='L');
+    const W = g.filter(p=>p.res==='W').length, Lo = g.length - W, Pu = mine.filter(p=>p.res==='P').length;
+    const u = mine.filter(p=>p.units!=null), mo = mine.filter(p=>p.money!=null);
+    const hidden = Object.values(pl.items||{}).filter(ms => ms > Date.now()).length;
+    return { uid:pl.uid, name:pl.name, me: pl.uid===L.me, n:g.length, W, L:Lo, P:Pu, pct: g.length ? W/g.length : null,
+      units: u.length ? u.reduce((s,p)=>s+p.units,0) : null, bet: mo.length ? mo.reduce((s,p)=>s+p.stake,0) : null,
+      money: mo.length ? mo.reduce((s,p)=>s+p.money,0) : null, live: mine.filter(p=>!p.res).length, hidden };
+  });
+  const [sk, dir] = S.lgSort;
+  const val = r => sk==='name' ? r.name : r[sk];
+  rows.sort((x,y) => {
+    const qx = x.n >= minN, qy = y.n >= minN; if(qx!==qy) return qx ? -1 : 1;   // los que no llegan al mínimo, abajo
+    if(sk==='name') return dir*String(x.name).localeCompare(String(y.name));
+    const a = val(x) ?? -1e9, b = val(y) ?? -1e9;
+    return a!==b ? dir*(a-b) : (y.units??-1e9)-(x.units??-1e9);
+  });
+  const cols = [['name','Jugador'],['n','Calificados'],['rec','Récord'],['pct','% acierto'],['units','Unidades'],['bet','Apostado'],['money','Ganancia'],['live','Pendientes']];
+  const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
+  let pos = 0;
+  $('lgTable').innerHTML = `<thead><tr><th class="n">#</th>${cols.map(([k,l])=>`<th data-k="${k==='rec'?'W':k}" class="${k==='name'?'':'n'} ${(k==='rec'?'W':k)===sk?'sorted'+(dir>0?' asc':''):''}">${l}</th>`).join('')}</tr></thead><tbody>${
+    rows.map(r => { const q = r.n >= minN; if(q) pos++;
+      return `<tr class="click ${r.uid===S.lgPlayer?'best':''}" data-uid="${r.uid}" style="${q?'':'opacity:.55'}"><td class="n">${q?(pos===1&&r.n?'🏆':pos):'—'}</td>
+      <td><b>${esc(r.name)}</b>${r.me?' <span class="note">(tú)</span>':''}${q?'':` <span class="note">faltan ${minN-r.n}</span>`}</td>
+      <td class="n">${r.n}</td><td class="n">${r.W}-${r.L}${r.P?'-'+r.P:''}</td><td class="n"><b>${r.pct==null?'—':Math.round(r.pct*1000)/10+'%'}</b></td>
+      <td class="n" style="${col(r.units)}">${r.units==null?'—':sgn(r.units,2)}</td><td class="n">${r.bet==null?'—':money(r.bet)}</td>
+      <td class="n" style="${col(r.money)}">${r.money==null?'—':money(r.money,true)}</td>
+      <td class="n">${r.live}${r.hidden?` <span class="note">+${r.hidden} por revelar</span>`:''}</td></tr>`; }).join('') || '<tr><td colspan="9" class="empty">Todavía nadie tiene picks.</td></tr>'}</tbody>`;
+  // picks revelados
+  const who = S.lgPlayer, name = who ? (L.players.find(p=>p.uid===who)?.name || '') : '';
+  $('lgFeedH').innerHTML = who ? `Picks de ${esc(name)} <button id="lgAll" style="min-height:26px;padding:0 8px;font-size:13px">Ver todos</button>` : 'Picks revelados';
+  const feed = L.picks.filter(p => inRange(p) && (!who || p.uid===who)).map(p=>({ ...p, ...gradePick(p) }))
+    .sort((x,y)=> String(y.date).localeCompare(String(x.date)) || (y.startMs||0)-(x.startMs||0));
+  const shown = feed.slice(0, S.lgMore ? feed.length : 50);
+  $('lgFeed').innerHTML = feed.length ? `<thead><tr><th>Fecha</th><th>Jugador</th><th>Partido</th><th>Parámetro</th><th>Momento</th><th class="n">Línea</th><th>Pick</th><th class="n">Momio</th><th class="n">Monto</th><th class="n">Real</th><th>Res.</th><th class="n">Ganancia</th></tr></thead><tbody>${
+    shown.map(r=>`<tr><td>${r.date||''}</td><td>${esc(r.name)}${lateFlag(r)}</td><td style="white-space:nowrap">${badge(r.a)} @ ${badge(r.h)}</td><td>${METRICS[r.metric]?.label||r.metric}</td>
+      <td>${r.moment||'Pre'}${r.curAtPick!=null?` <span class="note">(iba ${r.curAtPick})</span>`:''}</td><td class="n">${fmt(r.line)}</td>
+      <td><span class="pill ${r.pick==='OVER'?'over':'under'}">${r.pick}</span></td><td class="n">${r.odds??'—'}</td><td class="n">${r.stake?money(r.stake):'—'}</td>
+      <td class="n">${r.tot??'—'}</td><td class="res-${r.res}">${r.res==='W'?'Ganado':r.res==='L'?'Perdido':r.res==='P'?'Push':'En juego'}</td>
+      <td class="n" style="${col(r.money)}">${r.money==null?'—':money(r.money,true)}</td></tr>`).join('')}
+    ${feed.length>shown.length?`<tr><td colspan="12"><button id="lgMore">Ver los ${feed.length}</button></td></tr>`:''}</tbody>`
+    : '<tr><td class="empty">Sin picks revelados en este periodo.</td></tr>';
+  const mb = $('lgMore'); if(mb) mb.onclick = () => { S.lgMore = true; renderCompetencia(); };
+  const ab = $('lgAll'); if(ab) ab.onclick = () => { S.lgPlayer = null; renderCompetencia(); };
+}
+// Aviso si el pick se publicó cuando el partido ya había terminado (hora del servidor). Los anteriores a la competencia no cuentan.
+const LG_LAUNCH = '2026-10-21';
+const lateFlag = p => p.ts && p.startMs && p.ts > p.startMs + 3*3600e3 && !(p.date < LG_LAUNCH && String(p.created||'') < LG_LAUNCH)
+  ? ` <span class="pill under" title="Se publicó ${new Date(p.ts).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})}, después del partido">⚠ tarde</span>` : '';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+for(const id of ['lgRange','lgMetric']) $(id).onchange = () => { S.lgMore = false; renderCompetencia(); };
+$('lgMin').onchange = e => { store.set('lgMin', Number(e.target.value)||0); renderCompetencia(); };
+$('lgRefresh').onclick = () => Sync.loadLeague(true);
+$('lgTable').addEventListener('click', e => {
+  const k = e.target.closest('th')?.dataset.k;
+  if(k){ S.lgSort = S.lgSort[0]===k ? [k, -S.lgSort[1]] : [k, k==='name'?1:-1]; store.set('lgSort', S.lgSort); renderCompetencia(); return; }
+  const tr = e.target.closest('tr[data-uid]'); if(!tr) return;
+  S.lgPlayer = S.lgPlayer===tr.dataset.uid ? null : tr.dataset.uid; S.lgMore = false; renderCompetencia();
+});
+
+// ---------- seguimiento del modelo (con la configuración actual) ----------
+let _sgCache = null; const _sgMap = new Map();
+S.sgSort = store.get('sgSort', ['tmae', 1]);
+function trackRows(){
+  const f = METRICS[S.metric].f;
+  const key = [S.season, S.metric, S.model, S.win, S.rest, S.split, S.stat, S.games.length, JSON.stringify(S.lines).length].join('|');
+  if(_sgMap.has(key)) return _sgMap.get(key);
+  const logs = teamLogs(), rows = [];
+  const games = seasonGames().filter(g => f(g.h)!=null && f(g.a)!=null).sort((x,y)=>x.date.localeCompare(y.date));
+  const saved = S.asOf;
+  try{
+    for(const g of games){
+      const h = norm(g.h.t), a = norm(g.a.t);
+      if((logs[h]||[]).filter(x=>x.date<g.date).length < 5 || (logs[a]||[]).filter(x=>x.date<g.date).length < 5) continue;
+      S.asOf = g.date;
+      const P = project(h, a, null, null, g); if(P.proj==null) continue;
+      const act = f(g.h) + f(g.a);
+      const mine = S.lines[lineKey(g.id)];
+      const line = mine!=null ? Number(mine) : (S.metric==='pts' && g.mk?.ou!=null ? g.mk.ou : null);
+      let side = null;
+      if(line!=null && act!==line && P.proj!==line) side = (P.proj>line) === (act>line);
+      rows.push({ id:g.id, date:g.date, h, a, proj:P.proj, act, err:act-P.proj, hP:P.hProj, aP:P.aProj, hA:f(g.h), aA:f(g.a),
+        sig:P.sig, line, lineSrc: mine!=null ? 'tuya' : line!=null ? 'mercado' : null, side, rest:P.rest });
+    }
+  } finally { S.asOf = saved; }
+  if(_sgMap.size > 40) _sgMap.clear();
+  _sgMap.set(key, rows);
+  return rows;
+}
+function renderSeguimiento(){
+  const m = METRICS[S.metric];
+  if(!plFor(S.season)){ $('sgKpis').innerHTML = '<p class="note">Cargando jugadores…</p>'; ensurePlayers(S.season).then(()=>{ _sgMap.clear(); if(tab==='seguimiento') renderSeguimiento(); }); return; }
+  const teamsSel = $('sgTeam'), curT = teamsSel.value;
+  if(!teamsSel.options.length) teamsSel.innerHTML = '<option value="">Todos</option>' + Object.keys(TEAMS).sort((x,y)=>tname(x).localeCompare(tname(y))).map(t=>`<option value="${t}">${tname(t)}</option>`).join('');
+  teamsSel.value = curT || '';
+  const cfg = `${MODEL_LBL[S.model]} · ${WIN_LBL[S.win]} · ${S.rest==='on'?'con descanso':'sin descanso'}${S.split==='ha'?' · split local/visita':''}${S.stat==='median'?' · mediana':''}`;
+  $('sgSub').innerHTML = `Cada partido terminado de la temporada <b>${S.season?`${S.season-1}-${String(S.season).slice(2)}`:'—'}</b> contra la proyección que daba el modelo <b>antes</b> de jugarse, con tu configuración actual (<b>${cfg}</b>) y el parámetro <b>${m.label}</b>. Cambia los controles de arriba y se recalcula.`;
+  let rows = trackRows();
+  const days = Number($('sgRange').value);
+  if(days && rows.length){ const last = rows.at(-1).date, from = addDays(last, -days+1); rows = rows.filter(r=>r.date>=from); }
+  const T = $('sgTeam').value;
+  const rowsT = T ? rows.filter(r=>r.h===T || r.a===T) : rows;
+  if(!rowsT.length){
+    $('sgKpis').innerHTML = ''; $('sgChart').innerHTML = ''; $('sgTeams').innerHTML = ''; $('sgGames').innerHTML = '<tr><td class="empty">Todavía no hay partidos para evaluar (cada equipo necesita 5 juegos previos). Para ver cómo funciona, elige la temporada pasada arriba.</td></tr>'; $('sgFoot').textContent='';
+    return;
+  }
+  const avgAct = mean(rowsT.map(r=>r.act)), tol = Math.max(1, Math.round(avgAct*0.05));
+  const within = r => Math.abs(r.err) <= tol;
+  const pct = (a,b) => b ? Math.round(100*a/b)+'%' : '—';
+  const sideRows = rowsT.filter(r=>r.side!=null), sideW = sideRows.filter(r=>r.side).length;
+  const cov = rowsT.filter(r=>r.sig && Math.abs(r.err) <= 1.2816*r.sig).length;
+  const bias = mean(rowsT.map(r=>r.err));
+  $('sgKpis').innerHTML = [
+    ['Partidos evaluados', rowsT.length],
+    ['Error medio', fmt(mean(rowsT.map(r=>Math.abs(r.err))),1)],
+    [`Dentro de ±${tol}`, pct(rowsT.filter(within).length, rowsT.length)],
+    ['Acierto del lado', sideRows.length ? `${pct(sideW, sideRows.length)} <span class="note" style="font-size:12px">(${sideW}-${sideRows.length-sideW})</span>` : '<span class="note" style="font-size:13px">sin líneas</span>'],
+    ['Sesgo', `${sgn(bias)} <span class="note" style="font-size:12px">${Math.abs(bias)<0.5?'parejo':bias>0?'sale más':'sale menos'}</span>`],
+    ['Rango 80%', pct(cov, rowsT.length)],
+  ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
+  $('sgChart').innerHTML = sgChart(rowsT, tol);
+  // comparación de modelos sobre los mismos partidos
+  const filt = R => { let r = R; if(days && r.length){ const last = r.at(-1).date, from2 = addDays(last, -days+1); r = r.filter(x=>x.date>=from2); } return T ? r.filter(x=>x.h===T||x.a===T) : r; };
+  const byModel = {};
+  for(const mo of ['avg','mix','players','pace']){ const sv = S.model; S.model = mo; try{ byModel[mo] = filt(trackRows()); } finally { S.model = sv; } }
+  const ids = new Map(byModel.mix.map(r=>[r.id, r]));
+  const both = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) === (ids.get(r.id).proj>r.line)));
+  const split = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) !== (ids.get(r.id).proj>r.line)));
+  const mrow = (lbl, R) => { const sr = R.filter(r=>r.side!=null), w = sr.filter(r=>r.side).length;
+    return `<tr${MODEL_LBL[S.model]===lbl?' class="best"':''}><td>${lbl}</td><td class="n">${R.length}</td><td class="n">${R.length?fmt(mean(R.map(r=>Math.abs(r.err))),1):'—'}</td><td class="n">${R.length?sgn(mean(R.map(r=>r.err))):'—'}</td><td class="n">${sr.length?`${pct(w,sr.length)} <span class="note">(${w}-${sr.length-w})</span>`:'—'}</td></tr>`; };
+  const bw = both.filter(r=>r.side).length, sw = split.filter(r=>r.side).length, smw = split.filter(r=>ids.get(r.id).side).length;
+  $('sgModels').innerHTML = `<thead><tr><th>Modelo</th><th class="n">Partidos</th><th class="n">Error medio</th><th class="n">Sesgo</th><th class="n">Acierto del lado</th></tr></thead><tbody>
+    ${mrow('Promedios', byModel.avg)}${mrow('Mixto (promedios + jugadores)', byModel.mix)}${mrow('Jugadores', byModel.players)}${mrow('Ritmo × eficiencia', byModel.pace)}
+    <tr class="sumrow"><td>Cuando coinciden Promedios y Mixto</td><td class="n">${both.length}</td><td></td><td></td><td class="n">${both.length?`${pct(bw,both.length)} <span class="note">(${bw}-${both.length-bw})</span>`:'—'}</td></tr>
+    <tr><td>Cuando no coinciden: acierta Promedios / Mixto</td><td class="n">${split.length}</td><td></td><td></td><td class="n">${split.length?`${pct(sw,split.length)} / ${pct(smw,split.length)}`:'—'}</td></tr></tbody>`;
+
+  // por equipo
+  const byT = {};
+  for(const r of rows){
+    for(const [t, own, ownP] of [[r.h, r.hA, r.hP], [r.a, r.aA, r.aP]]){
+      const o = (byT[t] ||= { t, n:0, te:[], ae:[], over:0, w:0 });
+      o.n++; o.te.push(own - ownP); o.ae.push(r.err); if(r.act > r.proj) o.over++; if(within(r)) o.w++;
+    }
+  }
+  const tRows = Object.values(byT).map(o => ({ t:o.t, n:o.n, tmae: mean(o.te.map(Math.abs)), tbias: mean(o.te), mae: mean(o.ae.map(Math.abs)), bias: mean(o.ae), wp: o.w/o.n, op: o.over/o.n }));
+  const [sk, dir] = S.sgSort;
+  tRows.sort((x,y)=> sk==='t' ? dir*tname(x.t).localeCompare(tname(y.t)) : dir*((x[sk]??0)-(y[sk]??0)));
+  const cols = [['t','Equipo'],['n','Juegos'],['tmae','Error del equipo'],['tbias','Sesgo equipo'],['mae','Error total'],['bias','Sesgo total'],['wp',`Total dentro ±${tol}`],['op','Total arriba de proy.']];
+  const cell = (k, r) => k==='t' ? `<td><span class="tm" style="font-size:14px">${badge(r.t)} ${tname(r.t)}</span></td>`
+    : k==='n' ? `<td class="n">${r.n}</td>`
+    : k==='wp'||k==='op' ? `<td class="n">${Math.round(r[k]*100)}%</td>`
+    : k.includes('bias') ? `<td class="n" style="color:${r[k]>0.5?'var(--over)':r[k]<-0.5?'var(--under)':'inherit'}">${sgn(r[k])}</td>`
+    : `<td class="n">${fmt(r[k])}</td>`;
+  $('sgTeams').innerHTML = `<thead><tr><th class="n">#</th>${cols.map(([k,l])=>`<th data-k="${k}" class="${k==='t'?'':'n'} ${k===sk?'sorted'+(dir>0?' asc':''):''}">${l}</th>`).join('')}</tr></thead>
+    <tbody>${tRows.map((r,i)=>`<tr class="${r.t===T?'best':''}"><td class="n">${i+1}</td>${cols.map(([k])=>cell(k,r)).join('')}</tr>`).join('')}</tbody>`;
+
+  // partido por partido (más recientes primero)
+  const list = [...rowsT].reverse();
+  const shown = list.slice(0, S.sgMore ? list.length : 40);
+  $('sgGames').innerHTML = `<thead><tr><th>Fecha</th><th>Partido</th><th class="n">Proy.</th><th class="n">Real</th><th class="n">Error</th><th class="n">Línea</th><th>Lado modelo</th><th>Resultado</th></tr></thead><tbody>${
+    shown.map(r=>`<tr><td>${r.date}</td><td style="white-space:nowrap">${badge(r.a)}${r.rest?.rA==='b2b'?restTag('b2b'):''} @ ${badge(r.h)}${r.rest?.rH==='b2b'?restTag('b2b'):''}</td><td class="n">${fmt(r.proj)}</td><td class="n"><b>${r.act}</b></td>
+      <td class="n" style="color:${within(r)?'var(--over)':'inherit'}">${sgn(r.err)}</td>
+      <td class="n">${r.line!=null?`${fmt(r.line)} <span class="note">${r.lineSrc}</span>`:'—'}</td>
+      <td>${r.line!=null && r.proj!==r.line ? `<span class="pill ${r.proj>r.line?'over':'under'}">${r.proj>r.line?'OVER':'UNDER'}</span>` : ''}</td>
+      <td>${r.side==null ? (r.line!=null && r.act===r.line ? 'Push' : '<span class="note">—</span>') : r.side ? '<span class="res-W">✓ Acertó</span>' : '<span class="res-L">✗ Falló</span>'}</td></tr>`).join('')}
+    ${list.length>shown.length?`<tr><td colspan="8"><button id="sgMore">Ver los ${list.length} partidos</button></td></tr>`:''}</tbody>`;
+  const mb = $('sgMore'); if(mb) mb.onclick = () => { S.sgMore = true; renderSeguimiento(); };
+  $('sgFoot').innerHTML = `<b>Error</b> = real − proyección (positivo: salió más de lo proyectado). <b>Error del equipo</b> compara lo que produjo cada equipo con su propia proyección; un número bajo = equipo predecible. <b>Sesgo</b> positivo = suele quedar arriba de la proyección (tiende al OVER), negativo = abajo (tiende al UNDER).
+    <b>Acierto del lado</b> usa la línea que capturaste para ese partido y, si no hay y el parámetro es Puntos, la del mercado (DraftKings); arriba de 52.4% le gana a un momio de -110. Se cuentan los equipos con al menos 5 juegos previos; no incluye el ajuste por bajas.`;
+}
+function sgChart(rows, tol){
+  // error medio y % dentro de tolerancia por semana
+  const wk = {};
+  for(const r of rows){ const d = new Date(r.date+'T12:00:00Z'); const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - ((d.getUTCDay()+6)%7)); const k = mon.toISOString().slice(0,10);
+    (wk[k] ||= []).push(r); }
+  const W = Object.entries(wk).sort().map(([k,L])=>({ k, n:L.length, mae:mean(L.map(r=>Math.abs(r.err))), wp:L.filter(r=>Math.abs(r.err)<=tol).length/L.length }));
+  if(W.length < 2) return '';
+  const w = 720, hgt = 150, pad = 28, maxM = Math.max(...W.map(x=>x.mae))*1.15;
+  const X = i => pad + i*(w-2*pad)/(W.length-1), Y = v => hgt - 22 - v/maxM*(hgt-40);
+  const bw = Math.max(4, Math.min(22, (w-2*pad)/W.length*0.6));
+  const allM = mean(rows.map(r=>Math.abs(r.err)));
+  return `<div class="pl-card" style="padding:12px 14px"><div class="note" style="margin-bottom:4px">Error medio por semana (barras) · línea punteada = promedio del periodo (${fmt(allM)}). Pasa el dedo o el mouse por una barra para ver el detalle.</div>
+    <svg viewBox="0 0 ${w} ${hgt}" style="width:100%;height:auto;display:block" role="img" aria-label="Error medio por semana">
+      <line x1="${pad}" x2="${w-pad}" y1="${Y(allM)}" y2="${Y(allM)}" stroke="var(--muted)" stroke-dasharray="4 4"/>
+      ${W.map((x,i)=>`<g><title>Semana del ${x.k}: ${x.n} partidos · error medio ${fmt(x.mae)} · ${Math.round(x.wp*100)}% dentro de ±${tol}</title>
+        <rect x="${X(i)-bw/2}" y="${Y(x.mae)}" width="${bw}" height="${hgt-22-Y(x.mae)}" rx="3" fill="${x.mae<=allM?'var(--over)':'var(--accent)'}" opacity=".85"/></g>`).join('')}
+      <text x="${pad}" y="${hgt-6}" font-size="11" fill="var(--muted)">${W[0].k.slice(5)}</text>
+      <text x="${w-pad}" y="${hgt-6}" font-size="11" fill="var(--muted)" text-anchor="end">${W.at(-1).k.slice(5)}</text>
+    </svg></div>`;
+}
+$('sgRange').onchange = () => { S.sgMore = false; renderSeguimiento(); };
+$('sgTeam').onchange = () => { S.sgMore = false; renderSeguimiento(); };
+$('sgTeams').addEventListener('click', e => {
+  const k = e.target.closest('th')?.dataset.k; if(!k) return;
+  S.sgSort = S.sgSort[0]===k ? [k, -S.sgSort[1]] : [k, k==='t'||k.includes('mae')?1:-1];
+  store.set('sgSort', S.sgSort); renderSeguimiento();
+});
+
+// ---------- prueba del modelo (backtest) ----------
+const WIN_LBL = { '0':'Toda la temporada', '20':'Últimos 20', '10':'Últimos 10', '5':'Últimos 5' };
+const MODEL_LBL = { avg:'Promedios', pace:'Ritmo × eficiencia', players:'Jugadores', mix:'Mixto (promedios + jugadores)' };
+const cfgLabel = c => `${MODEL_LBL[c.model]} · ${WIN_LBL[c.win]} · ${c.rest==='on'?'con descanso':'sin descanso'}`;
+let _btBusy = false;
+async function runBacktest(){
+  if(_btBusy) return; _btBusy = true;
+  const metric = S.metric, f = METRICS[metric].f, season = S.season;
+  const games = seasonGames().filter(g => f(g.h)!=null && f(g.a)!=null).sort((x,y)=>x.date.localeCompare(y.date));
+  const configs = [];
+  if(!plFor(season)) { $('btNote').textContent = 'Cargando jugadores…'; await ensurePlayers(season); }
+  for(const model of ['avg','pace','players','mix']) for(const win of ['0','20','10','5']) for(const rest of ['off','on']) configs.push({ model, win, rest, err:[], cov:0, mw:0, ml:0 });
+  const saved = { win:S.win, model:S.model, rest:S.rest, asOf:S.asOf };
+  const logs = teamLogs(); let used = 0, mkN = 0;
+  $('btRun').disabled = true;
+  try{
+    for(let i=0;i<games.length;i++){
+      const g = games[i], h = norm(g.h.t), a = norm(g.a.t), act = f(g.h) + f(g.a);
+      const prevH = (logs[h]||[]).filter(x=>x.date<g.date).length, prevA = (logs[a]||[]).filter(x=>x.date<g.date).length;
+      if(prevH < 5 || prevA < 5) continue;            // necesita al menos 5 juegos previos de cada equipo
+      used++;
+      const ou = metric==='pts' && g.mk?.ou!=null && act!==g.mk.ou ? g.mk.ou : null;
+      if(ou!=null) mkN++;
+      S.asOf = g.date;
+      for(const c of configs){
+        S.win = c.win; S.model = c.model; S.rest = c.rest;
+        const P = project(h, a, null, null, g); if(P.proj==null) continue;
+        const e = act - P.proj; c.err.push(e);
+        if(P.sig && Math.abs(e) <= 1.2816*P.sig) c.cov++;
+        if(ou!=null && P.proj!==ou){ ((P.proj>ou) === (act>ou)) ? c.mw++ : c.ml++; }
+      }
+      if(i % 40 === 0){ $('btNote').textContent = `Probando… ${Math.round(100*i/games.length)}%`; Object.assign(S, saved); await new Promise(r=>setTimeout(r,0)); }
+    }
+  } finally { Object.assign(S, saved); _btBusy = false; $('btRun').disabled = false; }
+  const avgAct = mean(games.map(g=>f(g.h)+f(g.a)));
+  const tol = Math.max(1, Math.round(avgAct*0.05));
+  for(const c of configs){
+    const n = c.err.length; c.n = n;
+    c.mae = n ? mean(c.err.map(Math.abs)) : null; c.bias = n ? mean(c.err) : null;
+    c.rmse = n ? Math.sqrt(mean(c.err.map(x=>x*x))) : null;
+    c.within = n ? c.err.filter(x=>Math.abs(x)<=tol).length/n : null;
+    c.covP = n ? c.cov/n : null; c.mkP = c.mw+c.ml ? c.mw/(c.mw+c.ml) : null;
+    delete c.err;
+  }
+  S.bt = { metric, season, configs, used, total:games.length, tol, mkN, avgAct, ts:Date.now() };
+  $('btNote').textContent = '';
+  renderModelo();
+}
+function renderModelo(){
+  const m = METRICS[S.metric];
+  $('btSub').innerHTML = `Recorre la temporada <b>${S.season?`${S.season-1}-${String(S.season).slice(2)}`:'—'}</b> partido por partido con el parámetro <b>${m.label}</b>, calcula la proyección usando <b>solo los juegos anteriores</b> a cada fecha y la compara con el resultado real. Así ves cuál configuración le atina más.`;
+  const B = S.bt;
+  if(!B || B.metric!==S.metric || B.season!==S.season){
+    $('btRec').innerHTML = ''; $('btTable').innerHTML = '';
+    $('btFoot').textContent = seasonGames().length ? 'Toca "Correr prueba". Tarda unos segundos.' : 'Aún no hay partidos en esta temporada. Elige la temporada pasada arriba para probar el modelo con ella.';
+    return;
+  }
+  const rows = B.configs.filter(c=>c.n).sort((x,y)=>x.mae-y.mae);
+  if(!rows.length){ $('btRec').innerHTML = ''; $('btTable').innerHTML = '<tr><td class="empty">Todavía no hay suficientes juegos (cada equipo necesita 5 previos).</td></tr>'; $('btFoot').textContent=''; return; }
+  const best = rows[0];
+  const cur = B.configs.find(c=>c.model===S.model && c.win===S.win && c.rest===S.rest);
+  const isCur = cur === best;
+  $('btRec').innerHTML = `<div class="btrec"><div class="k" style="font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Mejor configuración para ${m.label.toLowerCase()}</div>
+    <div style="font-size:17px;margin:4px 0"><b>${cfgLabel(best)}</b> — se equivoca en promedio <b>${fmt(best.mae,2)}</b> ${cur&&!isCur?`(tu configuración actual: ${fmt(cur.mae,2)})`:''}</div>
+    ${cur && !isCur && cur.mae - best.mae < 0.02*best.mae ? '<p class="note" style="margin:2px 0 8px">La diferencia con tu configuración es muy chica (menos de 2%); en la práctica le atinan igual.</p>' : ''}
+    ${isCur ? '<span class="note">Ya es la que estás usando.</span>' : `<button class="primary" id="btUse">Usar esta configuración</button>`}</div>`;
+  const pct = v => v==null ? '—' : Math.round(v*100)+'%';
+  const hasMk = rows.some(c=>c.mkP!=null);
+  $('btTable').innerHTML = `<thead><tr><th>Configuración</th><th class="n">Juegos</th><th class="n">Error medio</th><th class="n">Sesgo</th><th class="n">Dentro de ±${B.tol}</th><th class="n">Rango 80%</th>${hasMk?'<th class="n">vs. mercado</th>':''}</tr></thead>
+    <tbody>${rows.map(c=>`<tr class="${c===best?'best':''}"><td>${cfgLabel(c)}${c===cur?' <span class="note">(actual)</span>':''}</td><td class="n">${c.n}</td><td class="n">${fmt(c.mae,2)}</td>
+      <td class="n">${sgn(c.bias,2)}</td><td class="n">${pct(c.within)}</td><td class="n">${pct(c.covP)}</td>${hasMk?`<td class="n">${c.mkP!=null?`${pct(c.mkP)} <span class="note">(${c.mw}-${c.ml})</span>`:'—'}</td>`:''}</tr>`).join('')}</tbody>`;
+  $('btFoot').innerHTML = `${B.used} de ${B.total} partidos probados (se saltan los primeros de cada equipo hasta que tenga 5 juegos). Promedio real del total: ${fmt(B.avgAct)}.<br>
+    <b>Error medio</b>: cuánto se aleja la proyección del resultado real, en promedio. <b>Sesgo</b>: positivo = el modelo se queda corto (salió más de lo proyectado); negativo = se pasa.
+    <b>Rango 80%</b>: qué tan seguido el resultado cayó dentro del rango que el modelo da como 80% probable; cerca de 80% = las probabilidades de OVER/UNDER están bien calibradas.
+    ${hasMk?`<b>vs. mercado</b>: cuando la proyección quedó arriba o abajo de la línea de DraftKings, qué tanto acertó el lado (${B.mkN} juegos con línea guardada; arriba de 52.4% le ganaría a un momio de -110).`:''}
+    No incluye el ajuste por bajas (no hay historial de lesionados por fecha). Los modelos <b>Jugadores</b> y <b>Mixto</b> usan a los jugadores que sí jugaron cada partido (como si la alineación estuviera confirmada), con sus números de antes de esa fecha.`;
+  const u = $('btUse'); if(u) u.onclick = () => {
+    for(const k of ['model','win','rest']){ S[k] = best[k]; store.set(k, S[k]); $(k).value = S[k]; }
+    renderModelo();
+  };
+}
+$('btRun').onclick = runBacktest;
+
+// ---------- render: registro (tu Sheet4) ----------
+function renderRegistro(){
+  const f = METRICS[S.metric].f, view = $('regView').value, lineV = $('regLine').value, L = lineV===''?null:Number(lineV);
+  const logs = teamLogs(), teams = Object.keys(TEAMS).filter(t=>logs[t]).sort((x,y)=>tname(x).localeCompare(tname(y)));
+  if(!teams.length){ $('regTable').innerHTML = '<tr><td class="empty">Sin datos todavía.</td></tr>'; return; }
+  const maxG = Math.max(...teams.map(t=>logs[t].length));
+  const val = x => { const a=f(x.me), b=f(x.op); if(a==null||b==null) return null; return view==='f'?a:view==='c'?b:a+b; };
+  let html = `<thead><tr><th class="sticky">Equipo</th><th class="n">AVG</th><th class="n">MEDIA</th>${L!=null?'<th class="n">G/O</th><th class="n">G/U</th><th class="n">% O</th>':''}${Array.from({length:maxG},(_,i)=>`<th class="n">G${i+1}</th>`).join('')}</tr></thead><tbody>`;
+  for(const t of teams){
+    const vals = logs[t].map(val), ok = vals.filter(v=>v!=null);
+    const o = L!=null ? ok.filter(v=>v>L).length : 0, u = L!=null ? ok.filter(v=>v<L).length : 0;
+    html += `<tr><td class="sticky"><span class="tm" style="font-size:14px">${badge(t)} ${tname(t)}</span></td>
+      <td class="n"><b>${fmt(mean(ok))}</b></td><td class="n">${fmt(median(ok))}</td>
+      ${L!=null?`<td class="n">${o}</td><td class="n">${u}</td><td class="n">${ok.length?Math.round(100*o/ok.length)+'%':'—'}</td>`:''}
+      ${logs[t].map((x,i)=>{ const v=vals[i]; const cls = L==null||v==null?'':v>L?'o':v<L?'u':'';
+        return `<td class="g ${cls}" title="${x.date} ${x.ha==='H'?'vs':'@'} ${x.opp}: ${f(x.me)} + ${f(x.op)}">${v??''}</td>`; }).join('')}
+      ${'<td class="g"></td>'.repeat(maxG-logs[t].length)}</tr>`;
+  }
+  $('regTable').innerHTML = html + '</tbody>';
+}
+$('regLine').addEventListener('input', renderRegistro);
+$('regView').addEventListener('change', renderRegistro);
+
+// ---------- render: picks ----------
+function gradePick(p){
+  let tot = null, done = false;
+  const db = finalFromDB(p.id);
+  const f = METRICS[p.metric].f;
+  if(db){ const a=f(db.h), b=f(db.a); if(a!=null&&b!=null){ tot=a+b; done=true; } }
+  else { const lv = S.live.find(x=>x.id===p.id); const k = METRICS[p.metric].live;
+    if(lv && k && lv.state!=='pre' && lv.h.st[k]!=null && !Number.isNaN(lv.h.st[k])){ tot = lv.h.st[k]+lv.a.st[k]; done = lv.state==='post'; } }
+  let res = '';
+  if(done){ res = tot===p.line ? 'P' : ((tot>p.line) === (p.pick==='OVER')) ? 'W' : 'L'; }
+  const units = !res || !p.dec ? null : res==='W' ? p.dec - 1 : res==='L' ? -1 : 0;
+  const money = units!=null && p.stake ? units * p.stake : null;
+  return { tot, res, units, money };
+}
+function renderPicks(){
+  const rows = [...S.picks].sort((x,y)=>(y.date||'').localeCompare(x.date||'')).map(p=>({...p, ...gradePick(p)}));
+  const W = rows.filter(r=>r.res==='W').length, Lo = rows.filter(r=>r.res==='L').length, Pu = rows.filter(r=>r.res==='P').length;
+  const pend = rows.filter(r=>!r.res).length;
+  const sugRows = rows.filter(r=>r.res && r.res!=='P' && r.sug);
+  const sugW = sugRows.filter(r => (r.tot>r.line) === (r.sug==='OVER')).length;
+  $('pickKpis').innerHTML = [
+    ['Récord', `${W}-${Lo}${Pu?'-'+Pu:''}`], ['% acierto', W+Lo?Math.round(100*W/(W+Lo))+'%':'—'], ['Pendientes', pend],
+    ['Modelo (sugerencia)', sugRows.length?`${sugW}-${sugRows.length-sugW} · ${Math.round(100*sugW/sugRows.length)}%`:'—'],
+    ...(() => { const u = rows.filter(r=>r.units!=null); if(!u.length) return [['Unidades','—']];
+      const tot = u.reduce((s,r)=>s+r.units,0);
+      return [['Unidades', `<span style="color:${tot>=0?'var(--over)':'var(--under)'}">${tot>=0?'+':''}${tot.toFixed(2)}</span>`], ['ROI', `${(100*tot/u.length).toFixed(1)}% <span class="note" style="font-size:12px">(${u.length})</span>`]]; })(),
+    ...(() => { const u = rows.filter(r=>r.money!=null); if(!u.length) return [];
+      const tot = u.reduce((s,r)=>s+r.money,0), bet = u.reduce((s,r)=>s+r.stake,0);
+      const open = rows.filter(r=>!r.res && r.stake).reduce((s,r)=>s+r.stake,0);
+      return [['Ganancia', `<span style="color:${tot>=0?'var(--over)':'var(--under)'}">${money(tot, true)}</span>`],
+        ['ROI en $', `${(100*tot/bet).toFixed(1)}%`], ['Apostado', money(bet)], ...(open ? [['En juego', money(open)]] : [])]; })(),
+  ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
+  if(!rows.length){ $('pickTable').innerHTML = '<tr><td class="empty">Todavía no hay picks. En "Partidos", pon la línea y elige OVER o UNDER.</td></tr>'; return; }
+  $('pickTable').innerHTML = `<thead><tr><th>Fecha</th><th>Partido</th><th>Parámetro</th><th>Momento</th><th class="n">Línea</th><th class="n">Momio</th><th class="n">Proy.</th><th>Sugerencia</th><th>Pick</th><th class="n">Real</th><th>Res.</th><th class="n">Unid.</th><th class="n">Monto</th><th class="n">Ganancia</th><th></th></tr></thead><tbody>${
+    rows.map(r=>`<tr><td>${r.date||''}</td><td>${badge(r.a)} @ ${badge(r.h)}</td><td>${METRICS[r.metric]?.label||r.metric}</td><td>${r.moment||'Pre'}${r.curAtPick!=null?` <span class="note">(iba ${r.curAtPick})</span>`:''}</td>
+      <td class="n">${fmt(r.line)}</td><td class="n">${r.odds??'—'}${r.ev!=null?` <span class="note">(${r.ev>0?'+':''}${(r.ev*100).toFixed(0)}%)</span>`:''}</td><td class="n">${fmt(r.proj)}</td><td>${r.sug?`<span class="pill ${r.sug==='OVER'?'over':'under'}">${r.sug}</span>`:''}</td>
+      <td><span class="pill ${r.pick==='OVER'?'over':'under'}">${r.pick}</span></td><td class="n">${r.tot??'—'}</td>
+      <td class="res-${r.res}">${r.res==='W'?'Ganado':r.res==='L'?'Perdido':r.res==='P'?'Push':'Pendiente'}</td>
+      <td class="n" style="color:${r.units>0?'var(--over)':r.units<0?'var(--under)':'inherit'}">${r.units==null?'—':(r.units>0?'+':'')+r.units.toFixed(2)}</td>
+      <td class="n">${r.stake?money(r.stake):'—'}</td>
+      <td class="n" style="color:${r.money>0?'var(--over)':r.money<0?'var(--under)':'inherit'}">${r.money==null?'—':money(r.money, true)}</td>
+      <td style="white-space:nowrap"><button data-edit="${r.uid||r.created}" title="Editar" style="min-height:26px;padding:0 8px">✏️</button> <button data-del="${r.uid||r.created}" title="Borrar" style="min-height:26px;padding:0 8px">✕</button></td></tr>`).join('')}</tbody>`;
+}
+const money = (v, signed=false) => (signed && v>0 ? '+' : v<0 ? '−' : '') + '$' + Math.abs(v).toLocaleString('es-MX',{minimumFractionDigits:0, maximumFractionDigits:2});
+$('stakeDef').value = S.stake ?? '';
+$('stakeDef').onchange = e => { S.stake = e.target.value==='' ? null : Number(e.target.value); store.set('stake', S.stake); };
+// ---------- editar pick ----------
+let _editing = null;
+function pickEV(p, line, oddsRaw, side){
+  const dec = oddsDec(oddsRaw);
+  let pS = null;
+  if(p.proj!=null && p.sig){
+    const pO = p.curAtPick!=null && p.curAtPick > line ? 1 : 1 - phi((line - p.proj)/p.sig);
+    pS = side==='OVER' ? pO : 1 - pO;
+  } else if(p.pSide!=null && line===p.line) pS = side===p.pick ? p.pSide : 1 - p.pSide;
+  return { dec, pS, ev: dec && pS!=null ? pS*dec - 1 : null };
+}
+function pkEvNote(){
+  if(!_editing) return;
+  const F = $('pkForm'), line = Number(F.line.value), r = pickEV(_editing, line, F.odds.value.trim(), F.pick.value);
+  const stake = Number(F.stake.value)||0;
+  $('pkEv').innerHTML = F.odds.value.trim() && !r.dec ? '<span style="color:var(--under)">Momio no válido: usa americano (-110, +120) o decimal (1.91).</span>'
+    : r.dec ? `Momio decimal ${r.dec.toFixed(3)}${stake?` · si gana cobras ${money(stake*(r.dec-1), true)}`:''}${r.ev!=null?` · valor esperado <b style="color:${r.ev>0?'var(--over)':'var(--under)'}">${r.ev>0?'+':''}${(r.ev*100).toFixed(1)}%</b>`:''}` : '';
+}
+$('pkForm').addEventListener('input', pkEvNote);
+$('pkDlg').addEventListener('close', () => {
+  const p = _editing; _editing = null;
+  if(!p || $('pkDlg').returnValue!=='ok') return;
+  const F = $('pkForm'), line = Number(F.line.value), odds = F.odds.value.trim(), side = F.pick.value;
+  if(Number.isNaN(line)) return;
+  const r = pickEV(p, line, odds, side);
+  p.pick = side; p.line = line;
+  p.odds = r.dec ? odds : null; p.dec = r.dec ? +r.dec.toFixed(4) : null; p.ev = r.ev!=null ? +r.ev.toFixed(4) : null;
+  if(r.pS!=null) p.pSide = +r.pS.toFixed(3);
+  p.stake = F.stake.value==='' ? null : Number(F.stake.value);
+  if(p.proj!=null) p.sug = p.proj > line ? 'OVER' : p.proj < line ? 'UNDER' : null;
+  p.edited = new Date().toISOString();
+  store.set('picks', S.picks); Sync.savePick(p); renderPicks();
+});
+$('pickTable').addEventListener('click', e => {
+  const ed = e.target.dataset.edit;
+  if(ed){
+    const p = S.picks.find(x=>(x.uid||x.created)===ed); if(!p) return;
+    _editing = p; const F = $('pkForm');
+    F.pick.value = p.pick; F.line.value = p.line; F.odds.value = p.odds ?? ''; F.stake.value = p.stake ?? '';
+    $('pkInfo').textContent = `${tname(p.a)} @ ${tname(p.h)} · ${METRICS[p.metric]?.label||p.metric} · ${p.date||''} · ${p.moment||'Pre'}`;
+    pkEvNote(); $('pkDlg').showModal(); return;
+  }
+  const d = e.target.dataset.del; if(!d) return;
+  const victim = S.picks.find(p=>(p.uid||p.created)===d); if(victim) Sync.deletePick(pickId(victim));
+  S.picks = S.picks.filter(p=>(p.uid||p.created)!==d); store.set('picks',S.picks); renderPicks();
+});
+function download(name, text, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+$('expCsv').onclick = () => {
+  const head = 'fecha,visita,local,parametro,momento,iba,linea,momio,momio_decimal,valor_esperado,proyeccion,sugerencia,pick,real,resultado,unidades,monto,ganancia';
+  const lines = S.picks.map(p=>{ const g=gradePick(p); return [p.date,p.a,p.h,p.metric,`"${p.moment||'Pre'}"`,p.curAtPick??'',p.line,p.odds??'',p.dec??'',p.ev??'',p.proj??'',p.sug??'',p.pick,g.tot??'',g.res,g.units??'',p.stake??'',g.money!=null?g.money.toFixed(2):''].join(','); });
+  download('picks_nba_jam.csv', [head,...lines].join('\n'), 'text/csv');
+};
+$('expJson').onclick = () => download('nba_jam_respaldo.json', JSON.stringify({ picks:S.picks, lines:S.lines, hist:S.hist, odds:S.odds, manual:S.manual }, null, 1), 'application/json');
+$('impBtn').onclick = () => $('impFile').click();
+$('impFile').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ const j = JSON.parse(await f.text());
+    const seen = new Set(S.picks.map(p=>p.uid||p.created));
+    for(const p of j.picks||[]) if(!seen.has(p.uid||p.created)) S.picks.push(p);
+    Object.assign(S.lines, j.lines||{}); Object.assign(S.hist, j.hist||{}); Object.assign(S.odds, j.odds||{});
+    store.set('picks',S.picks); store.set('lines',S.lines); store.set('hist',S.hist); store.set('odds',S.odds);
+    if(Sync.on){ S.picks.forEach(p=>Sync.savePick(p)); new Set([...Object.keys(j.lines||{}), ...Object.keys(j.hist||{}), ...Object.keys(j.odds||{})]).forEach(k=>Sync.saveLine(k)); }
+    renderPicks();
+  }catch{ alert('Archivo no válido'); }
+};
+
+// ---------- jugadores: datos ----------
+const PC = { gid:0, aid:1, team:2, st:3, min:4, pts:5, reb:6, ast:7, stl:8, blk:9, to:10, tpm:11, tpa:12, fgm:13, fga:14, ftm:15, fta:16, oreb:17, dreb:18, pf:19, pm:20 };
+const PSTATS = [['pts','PTS'],['reb','REB'],['ast','AST'],['tpm','3PM'],['stl','STL'],['blk','BLK'],['to','TO']];
+const pval = (r, k) => k==='pra' ? r[PC.pts]+r[PC.reb]+r[PC.ast] : k==='pr' ? r[PC.pts]+r[PC.reb] : k==='pa' ? r[PC.pts]+r[PC.ast] : k==='ra' ? r[PC.reb]+r[PC.ast] : r[PC[k]];
+S.pl = {}; S.plx = {}; S.ath = null; S.sum = {}; S.open = {}; S.plays = {};
+let gIndex = null;
+function gameIndex(){ if(!gIndex || gIndex.n!==S.games.length){ gIndex = { n:S.games.length, m:new Map(S.games.map(g=>[g.id,g])) }; } return gIndex.m; }
+async function loadAthletes(){
+  if(S.ath) return S.ath;
+  try{ S.ath = await fetch(`${DATA}/athletes.json?v=${Date.now()}`).then(r=>r.ok?r.json():{}); }catch{ S.ath = {}; }
+  return S.ath;
+}
+async function loadPlayers(season){
+  if(season==null) return null;
+  if(S.pl[season]) return S.pl[season];
+  let rows = [];
+  try{ rows = await fetch(`${DATA}/players/${season}.json?v=${Date.now()}`).then(r=>r.ok?r.json():[]); }catch{}
+  await loadAthletes();
+  const gi = gameIndex(), by = {}, byGame = {};
+  for(const r of rows){ const g = gi.get(r[0]); if(!g) continue;
+    const ha = norm(g.h.t)===norm(r[2]) ? 'H':'A';
+    const o = { r, date:g.date, gid:r[0], team:norm(r[2]), opp: norm(ha==='H'?g.a.t:g.h.t), ha };
+    (by[r[1]] ||= []).push(o); (byGame[r[0]] ||= []).push(o); }
+  for(const k in by) by[k].sort((x,y)=>x.date.localeCompare(y.date));
+  return (S.pl[season] = { by, byGame });
+}
+// Jugadores para proyectar: temporada elegida + la anterior para quien lleve menos de CARRY juegos
+async function ensurePlayers(season){
+  if(season==null) return null;
+  const prevS = Number(season) - 1, has = (S.meta?.player_seasons || []).map(Number).includes(prevS);
+  const [cur, prev] = await Promise.all([loadPlayers(season), has ? loadPlayers(prevS) : null]);
+  if(!prev) return (S.plx[season] = cur);
+  const by = {};
+  for(const aid of new Set([...Object.keys(prev.by), ...Object.keys(cur.by)])){
+    const c = cur.by[aid] || [], p = prev.by[aid] || [];
+    by[aid] = c.length >= CARRY ? c : [...spread(p, CARRY - c.length), ...c];
+  }
+  return (S.plx[season] = { by, byGame: { ...prev.byGame, ...cur.byGame } });
+}
+const plFor = season => S.plx[season] || null;
+async function loadAllPlayerSeasons(){
+  const seasons = (S.meta?.player_seasons || []).map(Number);
+  await Promise.all(seasons.map(loadPlayers));
+}
+const aName = id => S.ath?.[id]?.[0] || id;
+const aPos = id => S.ath?.[id]?.[2] || '';
+
+// ---------- rosters actuales (data/rosters.json, se actualiza 3 veces al día) ----------
+S.rost = null;
+async function loadRosters(){
+  try{
+    const j = await fetch(`${DATA}/rosters.json?v=${Date.now()}`).then(r=>r.ok?r.json():null);
+    if(!j || !j.teams) return;
+    const byAid = {}, inj = {}, teams = {};
+    for(const [t, list] of Object.entries(j.teams)){ const T = norm(t); teams[T] = [];
+      for(const [aid, st] of list){ byAid[aid] = T; teams[T].push(aid); if(st) inj[aid] = st; } }
+    S.rost = { byAid, inj, teams, start: j.season_start || null, updated: j.updated };
+  }catch{}
+}
+const latestSeason = () => Math.max(...S.games.map(g=>g.season), 0);
+// Equipo actual del jugador: el del roster de hoy (si estás viendo la temporada más reciente); si no, el de su último partido
+function curTeam(aid, fallback){
+  if(S.rost && Number(S.season) >= latestSeason()) return S.rost.byAid[aid] || 'FA';
+  return fallback;
+}
+const useRosterFor = asOf => !!(S.rost && S.rost.start && (asOf || etToday()) >= S.rost.start);
+function pAvg(list, k){ const v = list.map(o=>pval(o.r,k)).filter(x=>x!=null); return v.length ? mean(v) : null; }
+function playerWindow(list){ const n = Number(S.win); return n ? list.slice(-n) : list; }
+
+// Rotación de un equipo antes de una fecha: jugadores cuyo último juego fue con ese equipo y apareció en sus últimos 10 juegos
+function teamRotation(PL, team, asOf){
+  if(useRosterFor(asOf) && S.rost.teams[team]) return rosterRotation(PL, team, asOf);
+  const logs = (teamLogs()[team] || []).filter(x => !asOf || x.date < asOf);
+  const recent = new Set(logs.slice(-10).map(x=>x.id));
+  const lastGame = logs.at(-1)?.id;
+  const out = [];
+  for(const aid in PL.by){
+    const L = PL.by[aid].filter(o => !asOf || o.date < asOf);
+    if(!L.length) continue;
+    const last = L.at(-1);
+    if(last.team!==team || !recent.has(last.gid)) continue;
+    const tl = L.filter(o=>o.team===team);
+    out.push({ aid, L, tl, lastStarter: last.gid===lastGame && last.r[PC.st]===1, min: pAvg(tl,'min') });
+  }
+  out.sort((a,b)=> (b.lastStarter-a.lastStarter) || (b.min-a.min));
+  return out;
+}
+
+// Rotación con el roster actual: jugadores de hoy con sus números (aunque hayan sido con otro equipo)
+function rosterRotation(PL, team, asOf){
+  const logs = (teamLogs()[team] || []).filter(x => !asOf || x.date < asOf);
+  const lastGame = useRosterFor(logs.at(-1)?.date) ? logs.at(-1)?.id : null; // último juego de esta misma temporada
+  const out = S.rost.teams[team].map(aid => {
+    const L = (PL.by[aid] || []).filter(o => !asOf || o.date < asOf);
+    const lastG = lastGame ? L.find(o=>o.gid===lastGame) : null;
+    return { aid, L, tl: L.filter(o=>o.team===team), lastStarter: !!(lastG && lastG.r[PC.st]===1), min: pAvg(L.slice(-20),'min') || 0 };
+  });
+  out.sort((a,b)=> (b.lastStarter-a.lastStarter) || (b.min-a.min));
+  // sin juegos todavía esta temporada: titulares probables = los 5 con más minutos (sin contar lesionados Out)
+  if(!lastGame){ let n=0; for(const r of out){ if(n<5 && !isOut(S.rost.inj[r.aid])){ r.lastStarter = true; n++; } } out.sort((a,b)=> (b.lastStarter-a.lastStarter) || (b.min-a.min)); }
+  return out;
+}
+
+// Resumen en vivo de ESPN (lesiones + box score por jugador)
+async function fetchSummary(id){
+  try{
+    const j = await fetch(`${ESPN}/summary?event=${id}`).then(r=>{ if(!r.ok) throw 0; return r.json(); });
+    const inj = {}, box = {};
+    for(const t of j.injuries||[]){ const ab = norm(t.team?.abbreviation||''); inj[ab] = {};
+      for(const i of t.injuries||[]){ const a=i.athlete||{}; if(a.id){ inj[ab][a.id] = i.status || ''; if(S.ath && !S.ath[a.id]) S.ath[a.id]=[a.displayName,a.shortName,a.position?.abbreviation||'','']; } } }
+    for(const t of j.boxscore?.players||[]){ const ab = norm(t.team?.abbreviation||''); const b = t.statistics?.[0]; if(!b) continue;
+      const keys = b.keys||[]; box[ab] = (b.athletes||[]).map(a=>{ const st={}; keys.forEach((k,i)=>st[k]=a.stats?.[i]);
+        const ath=a.athlete||{}; if(S.ath && ath.id && !S.ath[ath.id]) S.ath[ath.id]=[ath.displayName,ath.shortName,ath.position?.abbreviation||'',ath.jersey||''];
+        return { aid:ath.id, starter:!!a.starter, dnp:!!a.didNotPlay, min:+st.minutes||0, pts:+st.points||0, reb:+st.rebounds||0, ast:+st.assists||0,
+          tpm: +(String(st['threePointFieldGoalsMade-threePointFieldGoalsAttempted']||'0').split('-')[0])||0 }; }); }
+    S.sum[id] = { inj, box, ts:Date.now() };
+  }catch{ S.sum[id] = S.sum[id] || { inj:{}, box:{}, ts:Date.now(), err:true }; }
+  return S.sum[id];
+}
+function injuriesFor(id, team){
+  const live = S.sum[id]?.inj?.[team];
+  if(live && Object.keys(live).length) return live;
+  const sl = S.slateFile.find(x=>x.id===id); const arr = sl?.inj?.[team] || sl?.inj?.[Object.keys(sl?.inj||{}).find(k=>norm(k)===team)] || [];
+  const o = {}; for(const [aid,,status] of arr) o[aid]=status;
+  if(!Object.keys(o).length && S.rost?.teams[team]) for(const aid of S.rost.teams[team]) if(S.rost.inj[aid]) o[aid] = S.rost.inj[aid];
+  return o;
+}
+const isOut = s => /out|suspen/i.test(s||'');
+
+// ---------- historial directo ----------
+function h2hHTML(g, key, line, asOf){
+  const m = METRICS[S.metric], h=g.h.t, a=g.a.t;
+  const games = S.games.filter(x => { const X=norm(x.h.t), Y=norm(x.a.t); return ((X===h&&Y===a)||(X===a&&Y===h)) && (!asOf || x.date < asOf) && x.id!==g.id; })
+    .sort((x,y)=>y.date.localeCompare(x.date));
+  if(!games.length) return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (0)</summary><div class="note" style="margin-top:6px">Sin enfrentamientos en la base. Carga temporadas anteriores con el backfill (README).</div></details>`;
+  const tots = games.map(x=>{ const u=m.f(x.h), v=m.f(x.a); return u==null||v==null?null:u+v; });
+  const ok = tots.filter(v=>v!=null), L = line===''?null:Number(line);
+  const ov = L!=null ? ok.filter(v=>v>L).length : null;
+  return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (${games.length}) · prom. ${fmt(mean(ok))}${L!=null?` · over ${ov}/${ok.length}`:''}</summary>
+    <table><thead><tr><th>Fecha</th><th>Temp.</th><th>Partido</th><th class="n">Marcador</th><th class="n">${m.label}</th></tr></thead><tbody>
+    ${games.map((x,i)=>{ const t=tots[i]; const cls = L==null||t==null?'':t>L?'o':t<L?'u':'';
+      return `<tr><td>${x.date}</td><td>${x.season-1}-${String(x.season).slice(2)}</td><td>${norm(x.a.t)} @ ${norm(x.h.t)}</td><td class="n">${x.a.pts}-${x.h.pts}</td><td class="n ${cls}">${t??'—'} <span class="note">(${m.f(x.a)??'-'}+${m.f(x.h)??'-'})</span></td></tr>`; }).join('')}
+    </tbody></table></details>`;
+}
+
+// ---------- alineaciones ----------
+function lineupHTML(g, key){
+  const o = S.open[key+'|lu'];
+  const head = `<details class="det lu" data-open="${key}|lu" data-gid="${g.id}" ${o?'open':''}><summary>Alineaciones y promedios por jugador</summary>`;
+  if(!o) return head + '</details>';
+  const PL = plFor(S.season);
+  if(!PL) return head + '<div class="note" style="margin-top:6px">Cargando jugadores…</div></details>';
+  const asOf = $('slateDate').value || null;
+  const m = S.metric, statKey = ['pts','reb','ast','tpm','stl','blk','to'].includes(m) ? m : 'pts';
+  const statLbl = PSTATS.find(x=>x[0]===statKey)[1];
+  const fromDB = PL.byGame[g.id];             // partido ya terminado y guardado
+  const liveBox = S.sum[g.id]?.box;           // en vivo desde ESPN
+  const teamBlock = (team, side) => {
+    const rot = teamRotation(PL, team, asOf);
+    const inj = injuriesFor(g.id, team);
+    let actual = null;
+    if(fromDB) actual = Object.fromEntries(fromDB.filter(x=>x.team===team).map(x=>[x.r[PC.aid], { starter:x.r[PC.st]===1, min:x.r[PC.min], pts:x.r[PC.pts], reb:x.r[PC.reb], ast:x.r[PC.ast], tpm:x.r[PC.tpm] }]));
+    else if(liveBox?.[team]?.length) actual = Object.fromEntries(liveBox[team].filter(x=>!x.dnp).map(x=>[x.aid, x]));
+    // agrega jugadores que jugaron hoy y no estaban en la rotación (debut, cambio de equipo)
+    if(actual) for(const aid in actual) if(!rot.find(r=>r.aid===aid)) rot.push({ aid, L:[], tl:[], lastStarter:false, min:0 });
+    const starterOf = r => actual ? !!actual[r.aid]?.starter : (r.lastStarter && !isOut(inj[r.aid]));
+    rot.sort((a,b)=> (starterOf(b)-starterOf(a)) || ((b.min||0)-(a.min||0)));
+    for(const aid in inj) if(!rot.find(r=>r.aid===aid)) rot.push({ aid, L:[], tl:[], lastStarter:false, min:0 });
+    const isH = team===g.h.t, TH = teamStats(g.h.t,'H'), TA = teamStats(g.a.t,'A');
+    const pp = TH.gp && TA.gp ? playerProject(g, team, isH ? g.a.t : g.h.t, isH ? 'H' : 'A', isH ? (TH.f + TA.c)/2 : (TA.f + TH.c)/2) : null;
+    const ppBy = Object.fromEntries((pp?.list || []).map(x => [x.aid, x]));
+    // que aparezcan también los que el modelo cuenta aunque no estén en la rotación
+    for(const x of pp?.list || []) if(x.emin >= 1 && !rot.find(r=>r.aid===x.aid)) rot.push({ aid:x.aid, L:(PL.by[x.aid]||[]).filter(o=>!asOf||o.date<asOf), tl:[], lastStarter:false, min:x.min });
+    const rows = rot.slice(0, 16);
+    let sumAvail = 0;
+    // sumas de las columnas (solo los que juegan: sin "Out"; si ya hay alineación real, solo los que jugaron)
+    const Z = { n:0, min:0, pts:0, reb:0, ast:0, tpm:0, l5p:0, l5r:0, l5a:0, emin:0, proj:0, tp:0, tr:0, ta:0, tm:0,
+                hp:0, hr:0, ha:0, h3:0 };
+    const body = rows.map(r => {
+      const W = playerWindow(r.L), L5 = r.L.slice(-5);
+      const st = inj[r.aid] || '', out = isOut(st) && !(actual && actual[r.aid]);
+      const av = pAvg(W, statKey); if(!out && av!=null && (!actual || actual[r.aid])) sumAvail += av;
+      const t = actual?.[r.aid];
+      if(!out && (!actual || t)){
+        const add = (k, v) => { if(v!=null && !Number.isNaN(v)) Z[k] += v; };
+        if(W.length) Z.n++;
+        add('min', pAvg(W,'min')); add('pts', pAvg(W,'pts')); add('reb', pAvg(W,'reb')); add('ast', pAvg(W,'ast')); add('tpm', pAvg(W,'tpm'));
+        add('l5p', pAvg(L5,'pts')); add('l5r', pAvg(L5,'reb')); add('l5a', pAvg(L5,'ast'));
+        const e = ppBy[r.aid]; if(e && e.emin >= 1){ add('emin', e.emin); add('proj', e.proj);
+          // lo que daría con los minutos de hoy: su producción por minuto × MIN est.
+          const Wm = W.filter(o => o.r[PC.min] > 0), mins = Wm.reduce((x,o)=>x+o.r[PC.min],0);
+          if(mins){ for(const [k, z] of [['pts','hp'],['reb','hr'],['ast','ha'],['tpm','h3']]) Z[z] += Wm.reduce((x,o)=>x+(pval(o.r,k)||0),0)/mins*e.emin; } }
+        if(t){ add('tp', Number(t.pts)); add('tr', Number(t.reb)); add('ta', Number(t.ast)); add('tm', Number(t.min)); }
+      }
+      return `<tr class="${out?'out':''}"><td>${starterOf(r)?'<span class="st">T</span>':''}</td><td>${aName(r.aid)} <span class="note">${aPos(r.aid)}</span> ${st?`<span class="inj ${isOut(st)?'':'dtd'}">${st}</span>`:''}</td>
+        <td class="n">${W.length||'—'}</td><td class="n">${fmt(pAvg(W,'min'),0)}</td><td class="n">${fmt(pAvg(W,'pts'))}</td><td class="n">${fmt(pAvg(W,'reb'))}</td><td class="n">${fmt(pAvg(W,'ast'))}</td><td class="n">${fmt(pAvg(W,'tpm'))}</td>
+        <td class="n note">${L5.length?`${fmt(pAvg(L5,'pts'),0)}/${fmt(pAvg(L5,'reb'),0)}/${fmt(pAvg(L5,'ast'),0)}`:'—'}</td>
+        <td class="n est">${ppBy[r.aid]?.emin>=1 ? fmt(ppBy[r.aid].emin,0) : '—'}</td><td class="n est"><b>${ppBy[r.aid]?.emin>=1 ? fmt(ppBy[r.aid].proj) : '—'}</b></td>
+        ${actual?`<td class="n today">${t?`${t.pts}/${t.reb}/${t.ast} <span class="note">${Math.round(t.min)}'</span>`:'—'}</td>`:''}</tr>`;
+    }).join('');
+    const T = teamStats(team, null, statKey); // promedio de equipo (respeta ventana)
+    return `<div class="lu-team">${badge(team)} ${tname(team)} <span class="note">${side}${actual?(fromDB?' · alineación real':' · alineación en vivo'):' · titulares probables (último juego)'}</span></div>
+      <div style="overflow-x:auto"><table><thead><tr><th></th><th>Jugador</th><th class="n">GP</th><th class="n">MIN</th><th class="n">PTS</th><th class="n">REB</th><th class="n">AST</th><th class="n">3PM</th><th class="n">L5 P/R/A</th><th class="n est" title="Minutos estimados para hoy">MIN est.</th><th class="n est" title="Parte de la proyección del equipo que le toca a este jugador">Proy. ${(PSTAT[S.metric]||'pts').toUpperCase()}</th>${actual?`<th class="n">${fromDB?'Ese juego':'Hoy'} P/R/A</th>`:''}</tr></thead>
+      <tbody>${body}
+      <tr class="sumrow"><td></td><td>Suma <span class="note">(${Z.n} jugadores)</span></td><td></td><td class="n">${fmt(Z.min,0)}</td><td class="n">${fmt(Z.pts)}</td><td class="n">${fmt(Z.reb)}</td><td class="n">${fmt(Z.ast)}</td><td class="n">${fmt(Z.tpm)}</td>
+        <td class="n note">${fmt(Z.l5p,0)}/${fmt(Z.l5r,0)}/${fmt(Z.l5a,0)}</td><td class="n est">${Z.emin?fmt(Z.emin,0):'—'}</td><td class="n est">${Z.proj?fmt(Z.proj):'—'}</td>
+        ${actual?`<td class="n today">${fmt(Z.tp,0)}/${fmt(Z.tr,0)}/${fmt(Z.ta,0)} <span class="note">${Math.round(Z.tm)}'</span></td>`:''}</tr>
+      ${Z.emin ? `<tr class="sumrow2"><td></td><td>Con los minutos de hoy <span class="note">(${fmt(Z.emin,0)}')</span></td><td></td><td></td><td class="n">${fmt(Z.hp)}</td><td class="n">${fmt(Z.hr)}</td><td class="n">${fmt(Z.ha)}</td><td class="n">${fmt(Z.h3)}</td><td colspan="${actual?4:3}"></td></tr>` : ''}
+      <tr class="sumrow"><td></td><td colspan="${actual?11:10}">${statLbl}: promedio del equipo <b>${fmt(T.f)}</b>
+        ${pp ? ` · proyección por jugadores: <b>${fmt(pp.f)}</b> <span class="note">(${pp.n} jugadores · índice de alineación <b>${pp.q.toFixed(2)}</b>${pp.q>=1.005?' más fuerte':pp.q<=0.995?' más débil':''} que la habitual → ${sgn((pp.qq-1)*100,1)}%${pp.fill>=1?` · ${fmt(pp.fill,0)}' para suplentes sin datos`:''})</span>` : ''}</td></tr></tbody></table></div>`;
+  };
+  return head + teamBlock(g.a.t,'visita') + teamBlock(g.h.t,'local') +
+    `<div class="note" style="margin-top:6px">Promedios ${Number(S.win)?'últimos '+S.win+' juegos':'de temporada'} antes de esta fecha. T = titular. Los "Out" no cuentan.
+      <b>MIN est.</b> = sus minutos promedio; titulares y los 3 siguientes los conservan y al resto se le reparte lo que falte para 240. <b>Índice de alineación</b>: cuánto produce cada jugador comparado con el promedio de su equipo, por los minutos que va a jugar; 1.00 = la alineación de siempre. La proyección del equipo (a favor y en contra del rival) se mueve 60% de esa diferencia. <b>Proy.</b> = la parte de cada jugador en esa proyección.
+      <b>Suma</b>: total de cada columna de los que juegan; los promedios suman de más porque cada jugador cuenta sus minutos completos (la suma de MIN pasa de 240). <b>Con los minutos de hoy</b>: lo que darían juntos si cada uno produce a su ritmo por minuto en sus MIN est. (equipo de 240 minutos), antes de ajustar por rival.</div></details>`;
+}
+
+// ---------- render: jugadores ----------
+let plSort = store.get('plSort', ['pts', -1]), plSel = null;
+
+// ---------- ranking por posición ----------
+// EFF (fórmula oficial NBA) = PTS + REB + AST + STL + BLK − tiros de campo fallados − libres fallados − pérdidas
+// Fantasy (escala DFS común) = PTS + 1.2·REB + 1.5·AST + 3·STL + 3·BLK − TO
+const SCORE = {
+  eff: r => r[PC.pts]+r[PC.reb]+r[PC.ast]+r[PC.stl]+r[PC.blk]-((r[PC.fga]??0)-(r[PC.fgm]??0))-((r[PC.fta]??0)-(r[PC.ftm]??0))-r[PC.to],
+  fan: r => r[PC.pts]+1.2*r[PC.reb]+1.5*r[PC.ast]+3*r[PC.stl]+3*r[PC.blk]-r[PC.to],
+};
+const scoreOf = (r, k) => SCORE[k] ? SCORE[k](r) : pval(r, k);
+const POS_GROUPS = [['G','Bases y escoltas','G · PG · SG'], ['F','Aleros y alas-pívot','F · SF · PF'], ['C','Centros','C']];
+function posGroup(pos){
+  const p = String(pos||'').toUpperCase();
+  if(!p) return null;
+  if(p.startsWith('C')) return 'C';
+  if(p.startsWith('PG')||p.startsWith('SG')||p.startsWith('G')) return 'G';
+  if(p.startsWith('SF')||p.startsWith('PF')||p.startsWith('F')) return 'F';
+  return null;
+}
+for(const id of ['rkScore','rkTop']) { const v = store.get(id, null); if(v!=null) $(id).value = v; }
+async function renderRanking(){
+  const PL = await loadPlayers(S.season);
+  if(tab!=='ranking') return;
+  const k = $('rkScore').value, top = Number($('rkTop').value);
+  store.set('rkScore', k); store.set('rkTop', $('rkTop').value);
+  const win = Number(S.win);
+  const minGp = Math.min(Number($('rkMinGp').value||1), win||Infinity), minMin = Number($('rkMinMin').value||0);
+  const label = $('rkScore').selectedOptions[0].textContent;
+  $('rkSub').textContent = `${label} por juego · ${win?'últimos '+win+' juegos de cada jugador':'toda la temporada'} · ${S.stat==='median'?'mediana':'promedio'}. Flecha = últimos 5 vs. su promedio.`;
+  if(!PL || !Object.keys(PL.by).length){ $('rkGrid').innerHTML = '<div class="empty"><h3>Sin datos de jugadores</h3>Se llena solo cuando arranque la temporada o al cargar temporadas anteriores.</div>'; $('rkNote').textContent=''; return; }
+  const groups = { G:[], F:[], C:[] }; let noPos = 0;
+  for(const aid in PL.by){
+    const all = PL.by[aid], W = playerWindow(all);
+    if(W.length < minGp) continue;
+    const mins = mean(W.map(o=>o.r[PC.min]));
+    if(mins < minMin) continue;
+    const gp = posGroup(aPos(aid)); if(!gp){ noPos++; continue; }
+    const sc = W.map(o=>scoreOf(o.r,k)), l5 = all.slice(-5).map(o=>scoreOf(o.r,k));
+    groups[gp].push({ aid, team: curTeam(aid, all.at(-1).team), gp: W.length, min: mins, score: agg(sc), l5: mean(l5),
+      pts: pAvg(W,'pts'), reb: pAvg(W,'reb'), ast: pAvg(W,'ast') });
+  }
+  $('rkGrid').innerHTML = POS_GROUPS.map(([g, title, sub]) => {
+    const list = groups[g].sort((a,b)=>b.score-a.score).slice(0, top);
+    return `<div class="rk-col"><h3>${title} <small>${sub} · ${groups[g].length} jugadores</small></h3>
+      <div style="overflow-x:auto"><table><thead><tr><th></th><th>Jugador</th><th class="n">Puntaje</th><th class="n">GP</th><th class="n">MIN</th><th class="n">P/R/A</th></tr></thead><tbody>
+      ${list.map((r,i)=>{ const d = r.l5 - r.score, tr = Math.abs(d) < 0.05*Math.max(1,r.score) ? '' : d>0 ? `<span class="up" title="Últimos 5: ${fmt(r.l5)}">▲</span>` : `<span class="down" title="Últimos 5: ${fmt(r.l5)}">▼</span>`;
+        return `<tr class="click ${i<3?'top3':''}" data-aid="${r.aid}"><td class="rk-n">${i+1}</td><td><div class="rk-pl">${badge(r.team)}<div><b>${aName(r.aid)}</b><div class="rk-meta"><span class="rk-pos">${aPos(r.aid)||'—'}</span> · ${tname(r.team)}</div></div></div></td>
+          <td class="n"><span class="score">${fmt(r.score)}</span> ${tr||'<span class="up" style="visibility:hidden">▲</span>'}</td><td class="n">${r.gp}</td><td class="n">${fmt(r.min,0)}</td><td class="n note">${fmt(r.pts,0)}/${fmt(r.reb,0)}/${fmt(r.ast,0)}</td></tr>`; }).join('') || '<tr><td colspan="6" class="note">Nadie cumple los filtros.</td></tr>'}
+      </tbody></table></div></div>`;
+  }).join('');
+  $('rkNote').textContent = noPos ? `${noPos} jugadores sin posición registrada no aparecen.` : '';
+}
+$('rkGrid').addEventListener('click', e => {
+  const tr = e.target.closest('tr[data-aid]'); if(!tr) return;
+  plSel = tr.dataset.aid; showTab('jugadores');
+});
+for(const id of ['rkScore','rkTop','rkMinGp','rkMinMin']) $(id).addEventListener('change', renderRanking);
+async function renderJugadores(){
+  const PL = await loadPlayers(S.season);
+  if(tab!=='jugadores') return;
+  if(!PL || !Object.keys(PL.by).length){ $('plTable').innerHTML = '<tr><td class="empty">Sin datos de jugadores para esta temporada todavía.</td></tr>'; $('plDetail').innerHTML=''; return; }
+  const q = $('plSearch').value.trim().toLowerCase(), tm = $('plTeam').value, minG = Number($('plMin').value||0);
+  const rows = [];
+  for(const aid in PL.by){
+    const all = PL.by[aid], W = playerWindow(all), last = all.at(-1);
+    const team = curTeam(aid, last.team);
+    if(tm && team!==tm) continue;
+    if(q && !aName(aid).toLowerCase().includes(q)) continue;
+    if(W.length < minG) continue;
+    const r = { aid, name:aName(aid), team, gp:W.length };
+    for(const k of ['min','pts','reb','ast','tpm','stl','blk','to','pra']) r[k] = pAvg(W,k);
+    rows.push(r);
+  }
+  const [sk, dir] = plSort;
+  rows.sort((x,y)=> sk==='name'||sk==='team' ? dir*String(x[sk]).localeCompare(String(y[sk])) : dir*((x[sk]??-1)-(y[sk]??-1)));
+  const cols = [['name','Jugador'],['team','Eq.'],['gp','GP'],['min','MIN'],['pts','PTS'],['reb','REB'],['ast','AST'],['tpm','3PM'],['stl','STL'],['blk','BLK'],['to','TO'],['pra','P+R+A']];
+  $('plTable').innerHTML = `<thead><tr>${cols.map(([k,l])=>`<th data-k="${k}" class="${['name','team'].includes(k)?'':'n'} ${k===sk?'sorted'+(dir>0?' asc':''):''}">${l}</th>`).join('')}</tr></thead><tbody>${
+    rows.slice(0,300).map(r=>`<tr class="click" data-aid="${r.aid}">${cols.map(([k])=> k==='name'?`<td>${r.name} <span class="note">${aPos(r.aid)}</span></td>` : k==='team'?`<td>${badge(r.team)}</td>` : `<td class="n">${fmt(r[k], k==='gp'?0:1)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  renderPlayerDetail();
+}
+async function renderPlayerDetail(){
+  if(!plSel){ $('plDetail').innerHTML=''; return; }
+  const vsOpp = $('plOpp')?.value || '';
+  const statK = $('plStat')?.value || 'pts', lineV = $('plLine')?.value ?? '';
+  let list;
+  if(vsOpp){ await loadAllPlayerSeasons(); list = Object.values(S.pl).flatMap(P => (P.by[plSel]||[])).filter(o=>o.opp===vsOpp).sort((x,y)=>x.date.localeCompare(y.date)); }
+  else list = S.pl[S.season]?.by[plSel] || [];
+  const L = lineV===''?null:Number(lineV);
+  const over = arr => { const v=arr.map(o=>pval(o.r,statK)); return L==null||!v.length?'—':`${v.filter(x=>x>L).length}/${v.length} (${Math.round(100*v.filter(x=>x>L).length/v.length)}%)`; };
+  const last = list.at(-1);
+  const statOpts = [['pts','Puntos'],['reb','Rebotes'],['ast','Asistencias'],['tpm','Triples'],['pra','P+R+A'],['pr','P+R'],['pa','P+A'],['ra','R+A'],['stl','Robos'],['blk','Bloqueos'],['to','Pérdidas']];
+  $('plDetail').innerHTML = `<div class="pl-card">
+    <div class="row" style="justify-content:space-between"><h3>${last?badge(curTeam(plSel, last.team)):''} ${aName(plSel)} <span class="note" style="text-transform:none;font:500 14px Barlow">${aPos(plSel)}</span></h3><button id="plClose">Cerrar</button></div>
+    <div class="row">
+      <div class="ctl"><label for="plStat">Estadística</label><select id="plStat">${statOpts.map(([k,l])=>`<option value="${k}" ${k===statK?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="ctl"><label for="plLine">Línea (prop)</label><input type="number" step="0.5" id="plLine" value="${lineV}" placeholder="ej. 6.5"></div>
+      <div class="ctl"><label for="plOpp">Contra</label><select id="plOpp"><option value="">Todos (temporada)</option>${Object.keys(TEAMS).sort((x,y)=>tname(x).localeCompare(tname(y))).map(t=>`<option value="${t}" ${t===vsOpp?'selected':''}>${tname(t)} (todas las temporadas)</option>`).join('')}</select></div>
+    </div>
+    <div class="kpis">
+      ${[['Juegos',list.length],['Promedio',fmt(pAvg(list,statK))],['Últimos 10',fmt(pAvg(list.slice(-10),statK))],['Últimos 5',fmt(pAvg(list.slice(-5),statK))],
+         ['Over línea',over(list)],['Over L10',over(list.slice(-10))]].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big" style="font-size:18px">${v}</div></div>`).join('')}
+    </div>
+    <div class="tablewrap" style="max-height:340px"><table><thead><tr><th>Fecha</th><th>Rival</th><th class="n">T</th><th class="n">MIN</th><th class="n">PTS</th><th class="n">REB</th><th class="n">AST</th><th class="n">3PM</th><th class="n">STL</th><th class="n">BLK</th><th class="n">TO</th><th class="n">FG</th><th class="n">+/-</th></tr></thead><tbody>
+    ${[...list].reverse().map(o=>{ const r=o.r, v=pval(r,statK); const cls=L==null?'':v>L?'o':v<L?'u':'';
+      const c = k => `<td class="n ${k===statK||(['pra','pr','pa','ra'].includes(statK)&&statK.includes(k[0])&&['pts','reb','ast'].includes(k))?cls:''}">${r[PC[k]]??'—'}</td>`;
+      return `<tr><td>${o.date}</td><td>${o.ha==='H'?'vs':'@'} ${badge(o.opp)}</td><td class="n">${r[PC.st]?'T':''}</td><td class="n">${r[PC.min]}</td>${['pts','reb','ast','tpm','stl','blk','to'].map(c).join('')}<td class="n">${r[PC.fgm]}-${r[PC.fga]}</td><td class="n">${r[PC.pm]??''}</td></tr>`; }).join('')}
+    </tbody></table></div></div>`;
+  $('plClose').onclick = () => { plSel=null; renderPlayerDetail(); };
+  for(const id of ['plStat','plOpp']) $(id).onchange = renderPlayerDetail;
+  $('plLine').onchange = renderPlayerDetail;
+}
+$('plTable').addEventListener('click', e => {
+  const th = e.target.closest('th');
+  if(th?.dataset.k){ const k=th.dataset.k; plSort = plSort[0]===k ? [k,-plSort[1]] : [k, ['name','team'].includes(k)?1:-1]; store.set('plSort',plSort); renderJugadores(); return; }
+  const tr = e.target.closest('tr[data-aid]'); if(!tr) return;
+  plSel = tr.dataset.aid; renderPlayerDetail(); $('plDetail').scrollIntoView({behavior:'smooth', block:'start'});
+});
+$('plSearch').addEventListener('input', renderJugadores);
+$('plTeam').addEventListener('change', renderJugadores);
+$('plMin').addEventListener('change', renderJugadores);
+
+// ---------- render: datos ----------
+function renderDatos(){
+  const sg = seasonGames();
+  const dates = sg.map(g=>g.date).sort();
+  $('dataKpis').innerHTML = [
+    ['Partidos (temporada)', sg.length], ['Partidos (total)', S.games.length],
+    ['Primer juego', dates[0]||'—'], ['Último juego', dates.at(-1)||'—'],
+    ['Actualizado', S.meta?.updated ? new Date(S.meta.updated).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}) : '—'],
+  ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big" style="font-size:15px;white-space:nowrap">${v}</div></div>`).join('');
+  const url = new URL(`${DATA}/games.csv`, location.href).href;
+  $('pq').textContent =
+`let
+    Origen = Csv.Document(Web.Contents("${url}"), [Delimiter=",", Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    Encabezados = Table.PromoteHeaders(Origen, [PromoteAllScalars=true]),
+    Numeros = Table.TransformColumnTypes(Encabezados,
+        List.Transform(List.RemoveItems(Table.ColumnNames(Encabezados), {"date","game_id","team","opp","ha"}), each {_, type number})),
+    Tipos = Table.TransformColumnTypes(Numeros, {{"date", type date}})
+in
+    Tipos`;
+}
+
+// ---------- equipos para selects ----------
+const teamOpts = Object.keys(TEAMS).sort((x,y)=>tname(x).localeCompare(tname(y))).map(t=>`<option value="${t}">${tname(t)}</option>`).join('');
+$('plTeam').innerHTML = '<option value="">Todos</option>' + teamOpts;
+$('mHome').innerHTML = teamOpts; $('mAway').innerHTML = teamOpts; $('mAway').value = 'BOS'; $('mHome').value = 'SA';
+$('mAdd').onclick = () => { const h=$('mHome').value, a=$('mAway').value; if(h===a) return; S.manual.push({h,a}); store.set('manual',S.manual); Sync.saveManual(); renderCards(); };
+
+// ---------- controles ----------
+$('metric').innerHTML = Object.entries(METRICS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+for(const [id,key] of [['metric','metric'],['win','win'],['split','split'],['stat','stat'],['model','model'],['rest','rest']]){
+  $(id).value = S[key];
+  $(id).onchange = e => { S[key] = e.target.value; store.set(key, S[key]); renderAll(); };
+}
+$('season').onchange = async e => { S.season = Number(e.target.value); store.set('season', S.season); _cache=null; renderAll(); if(S.adj!=='off' || S.model==='players' || S.model==='mix'){ await ensurePlayers(S.season); renderAll(); } };
+$('model').addEventListener('change', async () => { _sgMap.clear(); if(S.model==='players' || S.model==='mix'){ await ensurePlayers(S.season); await Promise.all(S.live.filter(g=>g.state!=='post' && !S.sum[g.id]).map(g=>fetchSummary(g.id))); renderAll(); } });
+
+let tab = store.get('tab','hoy');
+function showTab(t){ tab=t; store.set('tab',t);
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===t));
+  document.querySelectorAll('main section').forEach(s=>s.classList.toggle('on', s.id==='s-'+t));
+  renderAll(); }
+$('tabs').onclick = e => { const t=e.target.dataset.t; if(t) showTab(t); };
+
+function renderAll(){
+  if(tab==='hoy') renderCards();
+  else if(tab==='equipos') renderEquipos();
+  else if(tab==='registro') renderRegistro();
+  else if(tab==='picks') renderPicks();
+  else if(tab==='jugadores') renderJugadores();
+  else if(tab==='ranking') renderRanking();
+  else if(tab==='modelo') renderModelo();
+  else if(tab==='seguimiento') renderSeguimiento();
+  else if(tab==='competencia'){ renderCompetencia(); if(Sync.on && (!S.league || Date.now()-S.league.loaded > 120e3)) Sync.loadLeague(); }
+  else renderDatos();
+}
+
+async function goDate(d){
+  $('slateDate').value = d; await loadLive(d);
+  const openLu = Object.keys(S.open).filter(k=>S.open[k] && k.endsWith('|lu')).map(k=>k.split('|')[0]);
+  const openPbp = Object.keys(S.open).filter(k=>S.open[k] && k.endsWith('|pbp')).map(k=>k.split('|')[0]);
+  await Promise.all(S.live.filter(g=>g.state==='in' && openPbp.includes(g.id)).map(g=>fetchPlays(g.id)));
+  const needAdj = true;   // los jugadores se cargan siempre (comparación Promedios vs Mixto)
+  const stale = g => !S.sum[g.id] || g.state==='in' || Date.now()-S.sum[g.id].ts > 10*60e3;
+  await Promise.all([
+    needAdj ? ensurePlayers(S.season) : null,
+    ...S.live.filter(g=>g.state!=='post' && (needAdj || openLu.includes(g.id)) && stale(g)).map(g=>fetchSummary(g.id)),
+  ]);
+  renderAll();
+}
+$('slateDate').onchange = e => goDate(e.target.value);
+$('prevDay').onclick = () => goDate(addDays($('slateDate').value,-1));
+$('nextDay').onclick = () => goDate(addDays($('slateDate').value, 1));
+$('todayBtn').onclick = () => goDate(etToday());
+$('refreshLive').onclick = () => goDate($('slateDate').value);
+
+// tema
+const th = store.get('theme', null); if(th) document.documentElement.dataset.theme = th;
+$('themeBtn').onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark'; store.set('theme', document.documentElement.dataset.theme);
+};
+
+// auto-refresh en vivo cada 60 s si hay partidos en curso
+setInterval(() => {
+  if(['lineIn','oddsIn'].some(c=>document.activeElement?.classList?.contains(c))) return; // no interrumpir mientras capturas
+  if(S.live.some(g=>g.state==='in') && $('slateDate').value===etToday()) goDate(etToday());
+}, 60000);
+
+// API para sync.js
+let _pendingRender = false;
+window.JAM = {
+  S, Sync, store, pickId,
+  _fn: { playerProject, leagueTeamAvg, aName, project, teamStats },   // para diagnóstico
+  rerender(){  // no re-dibujar mientras escribes; espera a que salgas de la casilla
+    const ae = document.activeElement;
+    if(ae && ae.tagName==='INPUT' && (ae.closest('#cards') || ae.closest('#plDetail'))){
+      if(!_pendingRender){ _pendingRender = true; ae.addEventListener('blur', () => { _pendingRender=false; setTimeout(renderAll, 0); }, { once:true }); }
+      return;
+    }
+    renderAll();
+  },
+  setSync(html){ $('syncBox').innerHTML = html; },
+  resetUserData(){  // datos personales (no estadísticas): se limpian al cambiar de usuario
+    S.picks = []; S.lines = {}; S.hist = {}; S.odds = {}; S.manual = []; S.league = null; S.lgPlayer = null;
+    store.set('leagueCache', {});
+    store.set('picks', []); store.set('lines', {}); store.set('hist', {}); store.set('odds', {}); store.set('manual', []);
+    this.rerender();
+  },
+};
+window.dispatchEvent(new Event('jam-ready'));
+
+(async () => {
+  await loadData();
+  await loadRosters();
+  $('slateDate').value = qs.get('date') || etToday();
+  showTab(tab);
+  await goDate($('slateDate').value);
+})();
+})();
+</script>
+<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: './' }).catch(()=>{});</script>
+<script src="firebase-config.js"></script>
+<script type="module" src="sync.js"></script>
+</body>
+</html>
