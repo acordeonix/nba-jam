@@ -1077,8 +1077,12 @@ function compareHTML(P, g, h, a, line){
   const gap = M.proj - A.proj, L = line===''||line==null ? null : Number(line);
   let verdict = '';
   if(L!=null){
-    const sa = A.proj > L ? 'OVER' : A.proj < L ? 'UNDER' : null, sm = M.proj > L ? 'OVER' : M.proj < L ? 'UNDER' : null;
-    verdict = sa && sa===sm ? `<span class="pill ${sa==='OVER'?'over':'under'}">✓ los dos: ${sa}</span>` : `<span class="pill warn">⚠ no coinciden</span>`;
+    // "coinciden" solo si los dos quedan del mismo lado con margen (≈1% de la línea, 2.3 en puntos); si no, es parejo
+    const thr = Math.max(0.5, 0.01*L), side = v => v - L >= thr ? 'OVER' : L - v >= thr ? 'UNDER' : null;
+    const sa = side(A.proj), sm = side(M.proj), ra = A.proj > L ? 'OVER' : 'UNDER', rm = M.proj > L ? 'OVER' : 'UNDER';
+    verdict = sa && sa===sm ? `<span class="pill ${sa==='OVER'?'over':'under'}">✓ los dos: ${sa}</span>`
+      : ra !== rm ? `<span class="pill warn">⚠ no coinciden</span>`
+      : `<span class="pill">parejo · uno queda a menos de ${fmt(thr)} de la línea</span>`;
   } else verdict = Math.abs(gap) >= 6 ? '<span class="pill warn">⚠ se separan</span>' : Math.abs(gap) <= 3 ? '<span class="note">coinciden</span>' : '';
   return `<div class="cmp"><span class="k">Comparación</span>
     <span>Promedios <b>${fmt(A.proj)}</b>${L!=null?` <span class="note">(${sgn(A.proj-L)})</span>`:''}</span>
