@@ -79,6 +79,10 @@ section{display:none} section.on{display:block}
 .tagrest.b2b{border-color:var(--under);color:var(--under)}
 .mkt{display:flex;flex-direction:column;gap:4px;font-size:13px;padding:0 14px 12px;color:var(--muted)}
 .mkt b{color:var(--ink)}
+.cmp{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:13px;padding:0 14px 10px}
+.cmp .k{font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.cmp b{color:var(--ink)}
+.pill.warn{background:rgba(234,179,8,.15);color:#d4a017;border:1px solid rgba(234,179,8,.35)}
 .btrec{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px}
 tr.best td{background:var(--panel2);font-weight:600}
 h2{font:700 22px "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;letter-spacing:.4px;margin:0 0 4px}
@@ -344,6 +348,9 @@ tr.click{cursor:pointer}
     </div>
     <div class="kpis" id="sgKpis"></div>
     <div id="sgChart"></div>
+    <h2 style="margin-top:18px;font-size:19px">Promedios vs. Mixto</h2>
+    <p class="sub">Los mismos partidos con cada modelo (resto de la configuración igual). "Cuando coinciden" = Promedios y Mixto quedaron del mismo lado de la línea.</p>
+    <div class="tablewrap"><table id="sgModels"></table></div>
     <h2 style="margin-top:18px;font-size:19px">Qué equipos se apegan más a la proyección</h2>
     <p class="sub">Ordenado por el error del equipo (lo que anotó o produjo él contra lo que se le proyectó). Toca un encabezado para ordenar.</p>
     <div class="tablewrap"><table id="sgTeams"></table></div>
@@ -650,6 +657,28 @@ function playerProject(g, team, opp, ha, baseF, metric=S.metric){
   return { f, q, qq, fill, source, list, n: list.filter(x=>x.emin>=1).length };
 }
 
+// Inicio de temporada: en la temporada anterior, cuánto más (o menos) se produjo en el primer mes que en toda la temporada.
+// Se suma mientras la proyección use juegos de la temporada anterior, en proporción a cuántos de esos juegos usa.
+const _earlyCache = new Map();
+function earlyDelta(metric=S.metric){
+  const ps = Number(S.season) - 1, key = ps+'|'+metric+'|'+S.games.length;
+  if(_earlyCache.has(key)) return _earlyCache.get(key);
+  const f = METRICS[metric].f, G = S.games.filter(g => g.season == ps).sort((x,y)=>x.date.localeCompare(y.date));
+  let d = 0;
+  if(G.length > 300){
+    const end = addDays(G[0].date, 30), all = [], first = [];
+    for(const g of G) for(const t of [g.h, g.a]){ const v = f(t); if(v==null) continue; all.push(v); if(g.date < end) first.push(v); }
+    if(first.length > 50) d = mean(first) - mean(all);
+  }
+  _earlyCache.set(key, d); return d;
+}
+function earlyAdj(H, A){
+  const fr = T => T.logs?.length ? T.logs.filter(x=>x.prev).length / T.logs.length : 0;
+  const w = (fr(H) + fr(A))/2; if(!w) return null;
+  const d = earlyDelta(); if(Math.abs(d) < 0.01) return null;
+  return { per: d*w, w, d };   // por equipo
+}
+
 function project(h, a, line, adj, g){
   const H = teamStats(h,'H'), A = teamStats(a,'A');
   if(!H.gp || !A.gp) return { H, A, proj:null };
@@ -666,9 +695,10 @@ function project(h, a, line, adj, g){
   const rH = rest?.dH || 0, rA = rest?.dA || 0;     // efecto del descanso
   // producción perdida por bajas (ya descontada la recuperación); con el modelo por jugadores ya está incluida
   const dH = plm ? 0 : adj?.dH || 0, dA = plm ? 0 : adj?.dA || 0;
-  const proj = base + rH + rA - dH - dA;
-  const hProj = hB + rH - dH, aProj = aB + rA - dA;
-  const out = { H, A, proj, base, hProj, aProj, adj: plm ? null : adj, rest, pm, plm };
+  const early = earlyAdj(H, A), eT = early?.per || 0;   // inicio de temporada (por equipo)
+  const proj = base + rH + rA - dH - dA + 2*eT;
+  const hProj = hB + rH - dH + eT, aProj = aB + rA - dA + eT;
+  const out = { H, A, proj, base, hProj, aProj, adj: plm ? null : adj, rest, pm, plm, early };
   const sig = Math.sqrt(((H.sd||0)**2 + (A.sd||0)**2)/2);
   out.sig = sig || null;
   if(line!=null && line!==''){
@@ -1036,6 +1066,25 @@ const sgn = (v, d=1) => v==null ? '—' : (v>=0?'+':'') + Number(v).toFixed(d);
 function marketOf(g, db){
   return g.mk || db?.mk || S.slateFile.find(x=>x.id===g.id)?.mk || null;
 }
+// Las dos proyecciones juntas: Promedios (tu hoja) y Mixto, y si coinciden contra la línea
+function compareHTML(P, g, h, a, line){
+  if(P.proj==null) return '';
+  const cur = S.model, other = (cur==='avg' || cur==='pace') ? 'mix' : 'avg';
+  const sv = S.model; S.model = other;
+  let Q; try{ Q = project(h, a, line===''?null:line, null, g); } finally { S.model = sv; }
+  if(Q.proj==null || (other!=='avg' && !Q.plm) || ((cur==='mix' || cur==='players') && !P.plm)) return '';
+  const A = cur==='avg' ? P : Q, M = cur==='avg' ? Q : (cur==='mix' ? P : Q);
+  const gap = M.proj - A.proj, L = line===''||line==null ? null : Number(line);
+  let verdict = '';
+  if(L!=null){
+    const sa = A.proj > L ? 'OVER' : A.proj < L ? 'UNDER' : null, sm = M.proj > L ? 'OVER' : M.proj < L ? 'UNDER' : null;
+    verdict = sa && sa===sm ? `<span class="pill ${sa==='OVER'?'over':'under'}">✓ los dos: ${sa}</span>` : `<span class="pill warn">⚠ no coinciden</span>`;
+  } else verdict = Math.abs(gap) >= 6 ? '<span class="pill warn">⚠ se separan</span>' : Math.abs(gap) <= 3 ? '<span class="note">coinciden</span>' : '';
+  return `<div class="cmp"><span class="k">Comparación</span>
+    <span>Promedios <b>${fmt(A.proj)}</b>${L!=null?` <span class="note">(${sgn(A.proj-L)})</span>`:''}</span>
+    <span>Mixto <b>${fmt(M.proj)}</b>${L!=null?` <span class="note">(${sgn(M.proj-L)})</span>`:''}</span>
+    <span class="note">diferencia ${sgn(gap)}${Math.abs(gap)>=6?' · revisa Alineaciones':''}</span> ${verdict}</div>`;
+}
 function modelNote(P, g, db, h, a, m){
   if(P.proj==null) return '';
   const bits = [];
@@ -1044,6 +1093,7 @@ function modelNote(P, g, db, h, a, m){
   else if(S.model==='players' || S.model==='mix') bits.push(`<span class="note">Modelo por jugadores: ${plFor(S.season) ? 'sin datos de jugadores para este cruce; se usa el de promedios.' : 'cargando jugadores…'}</span>`);
   if(P.pm) bits.push(`<span>Ritmo esperado <b>${fmt(P.pm.pace)}</b> posesiones <span class="note">(${a} ${fmt(P.pm.pa.pace)} · ${h} ${fmt(P.pm.ph.pace)} · liga ${fmt(P.pm.lg.pace)})</span></span>`);
   else if(S.model==='pace') bits.push(`<span class="note">Sin datos de posesiones: se usa el modelo de promedios.</span>`);
+  if(P.early) bits.push(`<span>Inicio de temporada: <b>${sgn(P.early.per)}</b> por equipo <span class="note">(al inicio se anota más: en ${S.season-2}-${String(S.season-1).slice(2)} el 1er mes fue ${sgn(P.early.d)}; aplica ${Math.round(P.early.w*100)}%, baja a 0 al llegar a ${CARRY} juegos)</span></span>`);
   if(P.rest && (Math.abs(P.rest.dH)>=0.05 || Math.abs(P.rest.dA)>=0.05))
     bits.push(`<span>Descanso: ${a} ${REST_LBL[P.rest.rA]} <b>${sgn(P.rest.dA)}</b> · ${h} ${REST_LBL[P.rest.rH]} <b>${sgn(P.rest.dH)}</b></span>`);
   const mk = S.metric==='pts' ? marketOf(g, db) : null;
@@ -1114,6 +1164,7 @@ function renderCardsInner(){
         <div><div class="k">Proy. ${a} · ${h}</div><div class="big" style="font-size:15px;white-space:nowrap">${fmt(P.aProj)} · ${fmt(P.hProj)}</div></div>
         <div><div class="k">${g.state==='in'?'Actual':'Real'}</div><div class="big" ${curCls}>${cur!=null?cur:'—'}</div></div>
       </div>
+      ${compareHTML(P, g, h, a, line)}
       ${modelNote(P, g, db, h, a, m)}
       ${(g.state==='in' || g.state==='post' || db) && !g.manual ? liveStripHTML(g, db) : ''}
       ${adjNote(P, h, a)}
@@ -1343,12 +1394,12 @@ $('lgTable').addEventListener('click', e => {
 });
 
 // ---------- seguimiento del modelo (con la configuración actual) ----------
-let _sgCache = null;
+let _sgCache = null; const _sgMap = new Map();
 S.sgSort = store.get('sgSort', ['tmae', 1]);
 function trackRows(){
   const f = METRICS[S.metric].f;
   const key = [S.season, S.metric, S.model, S.win, S.rest, S.split, S.stat, S.games.length, JSON.stringify(S.lines).length].join('|');
-  if(_sgCache && _sgCache.key===key) return _sgCache.rows;
+  if(_sgMap.has(key)) return _sgMap.get(key);
   const logs = teamLogs(), rows = [];
   const games = seasonGames().filter(g => f(g.h)!=null && f(g.a)!=null).sort((x,y)=>x.date.localeCompare(y.date));
   const saved = S.asOf;
@@ -1367,12 +1418,13 @@ function trackRows(){
         sig:P.sig, line, lineSrc: mine!=null ? 'tuya' : line!=null ? 'mercado' : null, side, rest:P.rest });
     }
   } finally { S.asOf = saved; }
-  _sgCache = { key, rows };
+  if(_sgMap.size > 40) _sgMap.clear();
+  _sgMap.set(key, rows);
   return rows;
 }
 function renderSeguimiento(){
   const m = METRICS[S.metric];
-  if((S.model==='players'||S.model==='mix') && !plFor(S.season)){ $('sgKpis').innerHTML = '<p class="note">Cargando jugadores…</p>'; ensurePlayers(S.season).then(()=>{ _sgCache = null; if(tab==='seguimiento') renderSeguimiento(); }); return; }
+  if(!plFor(S.season)){ $('sgKpis').innerHTML = '<p class="note">Cargando jugadores…</p>'; ensurePlayers(S.season).then(()=>{ _sgMap.clear(); if(tab==='seguimiento') renderSeguimiento(); }); return; }
   const teamsSel = $('sgTeam'), curT = teamsSel.value;
   if(!teamsSel.options.length) teamsSel.innerHTML = '<option value="">Todos</option>' + Object.keys(TEAMS).sort((x,y)=>tname(x).localeCompare(tname(y))).map(t=>`<option value="${t}">${tname(t)}</option>`).join('');
   teamsSel.value = curT || '';
@@ -1402,6 +1454,20 @@ function renderSeguimiento(){
     ['Rango 80%', pct(cov, rowsT.length)],
   ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
   $('sgChart').innerHTML = sgChart(rowsT, tol);
+  // comparación de modelos sobre los mismos partidos
+  const filt = R => { let r = R; if(days && r.length){ const last = r.at(-1).date, from2 = addDays(last, -days+1); r = r.filter(x=>x.date>=from2); } return T ? r.filter(x=>x.h===T||x.a===T) : r; };
+  const byModel = {};
+  for(const mo of ['avg','mix','players','pace']){ const sv = S.model; S.model = mo; try{ byModel[mo] = filt(trackRows()); } finally { S.model = sv; } }
+  const ids = new Map(byModel.mix.map(r=>[r.id, r]));
+  const both = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) === (ids.get(r.id).proj>r.line)));
+  const split = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) !== (ids.get(r.id).proj>r.line)));
+  const mrow = (lbl, R) => { const sr = R.filter(r=>r.side!=null), w = sr.filter(r=>r.side).length;
+    return `<tr${MODEL_LBL[S.model]===lbl?' class="best"':''}><td>${lbl}</td><td class="n">${R.length}</td><td class="n">${R.length?fmt(mean(R.map(r=>Math.abs(r.err))),1):'—'}</td><td class="n">${R.length?sgn(mean(R.map(r=>r.err))):'—'}</td><td class="n">${sr.length?`${pct(w,sr.length)} <span class="note">(${w}-${sr.length-w})</span>`:'—'}</td></tr>`; };
+  const bw = both.filter(r=>r.side).length, sw = split.filter(r=>r.side).length, smw = split.filter(r=>ids.get(r.id).side).length;
+  $('sgModels').innerHTML = `<thead><tr><th>Modelo</th><th class="n">Partidos</th><th class="n">Error medio</th><th class="n">Sesgo</th><th class="n">Acierto del lado</th></tr></thead><tbody>
+    ${mrow('Promedios', byModel.avg)}${mrow('Mixto (promedios + jugadores)', byModel.mix)}${mrow('Jugadores', byModel.players)}${mrow('Ritmo × eficiencia', byModel.pace)}
+    <tr class="sumrow"><td>Cuando coinciden Promedios y Mixto</td><td class="n">${both.length}</td><td></td><td></td><td class="n">${both.length?`${pct(bw,both.length)} <span class="note">(${bw}-${both.length-bw})</span>`:'—'}</td></tr>
+    <tr><td>Cuando no coinciden: acierta Promedios / Mixto</td><td class="n">${split.length}</td><td></td><td></td><td class="n">${split.length?`${pct(sw,split.length)} / ${pct(smw,split.length)}`:'—'}</td></tr></tbody>`;
 
   // por equipo
   const byT = {};
@@ -2056,7 +2122,7 @@ for(const [id,key] of [['metric','metric'],['win','win'],['split','split'],['sta
   $(id).onchange = e => { S[key] = e.target.value; store.set(key, S[key]); renderAll(); };
 }
 $('season').onchange = async e => { S.season = Number(e.target.value); store.set('season', S.season); _cache=null; renderAll(); if(S.adj!=='off' || S.model==='players' || S.model==='mix'){ await ensurePlayers(S.season); renderAll(); } };
-$('model').addEventListener('change', async () => { _sgCache = null; if(S.model==='players' || S.model==='mix'){ await ensurePlayers(S.season); await Promise.all(S.live.filter(g=>g.state!=='post' && !S.sum[g.id]).map(g=>fetchSummary(g.id))); renderAll(); } });
+$('model').addEventListener('change', async () => { _sgMap.clear(); if(S.model==='players' || S.model==='mix'){ await ensurePlayers(S.season); await Promise.all(S.live.filter(g=>g.state!=='post' && !S.sum[g.id]).map(g=>fetchSummary(g.id))); renderAll(); } });
 
 let tab = store.get('tab','hoy');
 function showTab(t){ tab=t; store.set('tab',t);
@@ -2083,7 +2149,7 @@ async function goDate(d){
   const openLu = Object.keys(S.open).filter(k=>S.open[k] && k.endsWith('|lu')).map(k=>k.split('|')[0]);
   const openPbp = Object.keys(S.open).filter(k=>S.open[k] && k.endsWith('|pbp')).map(k=>k.split('|')[0]);
   await Promise.all(S.live.filter(g=>g.state==='in' && openPbp.includes(g.id)).map(g=>fetchPlays(g.id)));
-  const needAdj = S.adj!=='off' || S.model==='players' || S.model==='mix';
+  const needAdj = true;   // los jugadores se cargan siempre (comparación Promedios vs Mixto)
   const stale = g => !S.sum[g.id] || g.state==='in' || Date.now()-S.sum[g.id].ts > 10*60e3;
   await Promise.all([
     needAdj ? ensurePlayers(S.season) : null,
