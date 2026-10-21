@@ -7,6 +7,8 @@
 //   users/{uid}/meta/state                 -> { manual:[…] }
 //   config/access                          -> { allowed:[correos] }        (solo admin)
 //   requests/{uid}                         -> { email, name, ts }          (solicitudes de acceso)
+//   league/{uid}                           -> { name, items:{pickId:inicioMs}, updated }   (competencia: índice visible a aprobados)
+//   leaguePicks/{uid}_{pickId}             -> copia del pick; los demás la leen cuando empieza el partido
 const FBV = '10.12.2';
 const J = window.JAM;
 const cfg = window.FIREBASE_CONFIG;
@@ -88,10 +90,84 @@ async function start() {
     if (denied(e)) { disable(); ui('pending', me); } else ui('err', { msg: e.message });
   };
 
+  // ---------- competencia ----------
+  // Inicio del partido en ms: el que se guardó al hacer el pick; si no, el calendario; si no, 7 pm ET de esa fecha
+  const startOf = p => {
+    const t = Date.parse(p.start || '') || Date.parse(S.live.find(g => g.id === p.id)?.start || '') || Date.parse(S.slateFile.find(g => g.id === p.id)?.start || '');
+    return t || (p.date ? Date.parse(p.date + 'T23:00:00Z') : null);
+  };
+  const leagueable = p => p && p.id && !String(p.id).startsWith('M') && p.date;
+  const LP = id => fb.doc(db, 'leaguePicks', `${uid}_${id}`);
+  const LI = () => fb.doc(db, 'league', uid);
+  const quiet = e => console.warn('competencia:', e?.message || e); // un pick ya iniciado no se puede cambiar: es normal
+  async function publish(p) {
+    if (!leagueable(p)) return;
+    const startMs = startOf(p); if (!startMs) return;
+    const id = pickId(p);
+    const doc = clean({ uid, name: me.name, startMs, pid: id, id: p.id, date: p.date, metric: p.metric, h: p.h, a: p.a, line: p.line, pick: p.pick,
+      odds: p.odds ?? null, dec: p.dec ?? null, stake: p.stake ?? null, phase: p.phase || 'pre', moment: p.moment || 'Pre', curAtPick: p.curAtPick ?? null, created: p.created || null });
+    try {
+      // nuevo: con la hora del servidor (ts) para saber cuándo se publicó; si ya existía, se actualiza sin tocar ts
+      try { await fb.setDoc(LP(id), { ...doc, ts: fb.serverTimestamp() }); }
+      catch (e) { if (!denied(e)) throw e; await fb.setDoc(LP(id), doc, { merge: true }); }
+      await fb.setDoc(LI(), { name: me.name, items: { [id]: startMs }, updated: Date.now() }, { merge: true });
+    } catch (e) { quiet(e); }
+  }
+  async function unpublish(id) {
+    try {
+      await fb.deleteDoc(LP(id));
+      await fb.setDoc(LI(), { items: { [id]: fb.deleteField() }, updated: Date.now() }, { merge: true });
+    } catch (e) { quiet(e); }
+  }
+  // Publica los picks que aún no están en la competencia (los de antes de que existiera)
+  async function backfillLeague() {
+    try {
+      const snap = await fb.getDoc(LI());
+      const have = (snap.exists() && snap.data().items) || {};
+      const todo = S.picks.filter(p => leagueable(p) && !(pickId(p) in have));
+      for (const p of todo) await publish(p);
+      if (!snap.exists() && !todo.length) await fb.setDoc(LI(), { name: me.name, items: {}, updated: Date.now() }, { merge: true });
+      else if (snap.exists() && snap.data().name !== me.name) await fb.setDoc(LI(), { name: me.name }, { merge: true });
+    } catch (e) { quiet(e); }
+  }
+  let leagueBusy = false;
+  async function loadLeague(force) {
+    if (leagueBusy) return; leagueBusy = true;
+    const cache = force ? {} : (store.get('leagueCache', {}) || {});
+    try {
+      const idx = await fb.getDocs(fb.collection(db, 'league'));
+      const players = idx.docs.map(d => ({ uid: d.id, ...d.data() }));
+      const now = Date.now(), want = [];
+      for (const pl of players) for (const [pid, ms] of Object.entries(pl.items || {})) {
+        const key = `${pl.uid}_${pid}`;
+        if (cache[key]) continue;
+        if (pl.uid === uid || ms <= now) want.push(key);
+      }
+      // de 10 en 10 para no saturar
+      for (let i = 0; i < want.length; i += 10) {
+        await Promise.all(want.slice(i, i + 10).map(async key => {
+          try { const d = await fb.getDoc(fb.doc(db, 'leaguePicks', key)); if (d.exists()) { const x = d.data(); x.ts = x.ts?.toMillis?.() ?? x.ts; cache[key] = x; } }
+          catch (e) { /* aún no empieza (reloj adelantado) o sin permiso */ }
+        }));
+      }
+      // quitar lo que ya no está en ningún índice (picks borrados antes del inicio)
+      const live = new Set(players.flatMap(pl => Object.keys(pl.items || {}).map(pid => `${pl.uid}_${pid}`)));
+      for (const k of Object.keys(cache)) if (!live.has(k)) delete cache[k];
+      // solo se guardan en caché los ya iniciados (después del inicio ya no pueden cambiar)
+      store.set('leagueCache', Object.fromEntries(Object.entries(cache).filter(([, v]) => v.startMs <= now)));
+      const names = Object.fromEntries(players.map(pl => [pl.uid, pl.name]));
+      const tsMs = t => t?.toMillis?.() ?? (t?.seconds != null ? t.seconds * 1000 : null);
+      S.league = { me: uid, loaded: Date.now(), players, picks: Object.values(cache).map(p => ({ ...p, ts: tsMs(p.ts), name: names[p.uid] || p.name })) };
+    } catch (e) {
+      S.league = { me: uid, loaded: Date.now(), players: [], picks: [], err: e.message };
+    } finally { leagueBusy = false; J.rerender(); }
+  }
+
   function enable() {
     Sync.on = true;
-    Sync.savePick = p => fb.setDoc(P('picks', pickId(p)), clean(p)).catch(fail);
-    Sync.deletePick = id => id && fb.deleteDoc(P('picks', id)).catch(fail);
+    Sync.loadLeague = loadLeague;
+    Sync.savePick = p => { publish(p); return fb.setDoc(P('picks', pickId(p)), clean(p)).catch(fail); };
+    Sync.deletePick = id => { if (!id) return; unpublish(id); return fb.deleteDoc(P('picks', id)).catch(fail); };
     Sync.saveLine = key => {
       const line = S.lines[key] ?? null, hist = S.hist[key] || [], odds = S.odds[key] || null;
       if (line == null && !hist.length && !odds) return fb.deleteDoc(P('lines', key)).catch(fail);
@@ -101,7 +177,8 @@ async function start() {
   }
   function disable() {
     Sync.on = false;
-    Sync.savePick = Sync.deletePick = Sync.saveLine = Sync.saveManual = () => {};
+    Sync.savePick = Sync.deletePick = Sync.saveLine = Sync.saveManual = Sync.loadLeague = () => {};
+    S.league = null;
     unsubs.forEach(u => u()); unsubs = [];
     adminUnsub?.(); adminUnsub = null;
   }
@@ -175,6 +252,7 @@ async function start() {
       setLast(uid);
       enable(); listen();
       ui('on', me);
+      backfillLeague();
       if (ADMINS.includes(me.email)) watchRequests();
     } catch (e) { fail(e); }
   });
