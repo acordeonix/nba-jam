@@ -95,6 +95,13 @@ function parseTeamStats(teamBox) {
   };
 }
 
+// Momios americanos del over/under (si ESPN los trae)
+function ouOdds(pc) {
+  const o = num(pc.overOdds) ?? num(pc.total?.over?.close?.odds) ?? num(pc.total?.over?.open?.odds);
+  const u = num(pc.underOdds) ?? num(pc.total?.under?.close?.odds) ?? num(pc.total?.under?.open?.odds);
+  return { ...(o != null ? { o } : {}), ...(u != null ? { u } : {}) };
+}
+
 function parseGame(event, summary) {
   const comp = event.competitions[0];
   const side = ha => comp.competitors.find(c => c.homeAway === ha);
@@ -108,7 +115,7 @@ function parseGame(event, summary) {
   };
   // Línea del mercado (DraftKings vía ESPN): total de puntos y spread del local
   const pc = (summary?.pickcenter || [])[0] || comp.odds?.[0] || null;
-  const mk = pc && num(pc.overUnder) != null ? { ou: num(pc.overUnder), sp: num(pc.spread), p: pc.provider?.name || '', det: pc.details || '' } : undefined;
+  const mk = pc && num(pc.overUnder) != null ? { ou: num(pc.overUnder), sp: num(pc.spread), p: pc.provider?.name || '', det: pc.details || '', ...ouOdds(pc) } : undefined;
   return {
     id: event.id,
     date: null, // se asigna con la fecha ET consultada
@@ -287,7 +294,7 @@ async function main() {
           await sleep(DELAY_MS); const sm = await getJSON(`${BASE}/summary?event=${ev.id}`);
           inj = parseInjuries(sm, athletes);
           const pc = (sm.pickcenter || [])[0] || ev.competitions[0].odds?.[0];
-          if (pc && num(pc.overUnder) != null) mk = { ou: num(pc.overUnder), sp: num(pc.spread), p: pc.provider?.name || '', det: pc.details || '' };
+          if (pc && num(pc.overUnder) != null) mk = { ou: num(pc.overUnder), sp: num(pc.spread), p: pc.provider?.name || '', det: pc.details || '', ...ouOdds(pc) };
         } catch {}
         slate.push({
           id: ev.id, date: d, start: ev.date, type: ev.season?.type,
