@@ -349,7 +349,7 @@ tr.click{cursor:pointer}
     <div class="kpis" id="sgKpis"></div>
     <div id="sgChart"></div>
     <h2 style="margin-top:18px;font-size:19px">Cada modelo con tus líneas y momios</h2>
-    <p class="sub">Cada partido terminado, aunque no hayas hecho pick: qué lado recomendaba cada modelo <b>antes del partido</b> contra la línea (la tuya o la de DraftKings), si acertó y cuánto habría ganado apostando 1 unidad con el momio. Toca un modelo para ver partido por partido.</p>
+    <p class="sub">Cada partido terminado, aunque no hayas hecho pick: qué lado recomendaba cada modelo <b>antes del partido</b> contra la línea (la tuya o la de DraftKings), si acertó y cuánto habría ganado apostando 1 unidad con el momio. Abajo, todos los partidos con los cuatro modelos; toca un modelo para ver solo el suyo con momio, valor y unidades.</p>
     <div class="row">
       <div class="ctl"><label for="moMoment">Momento</label><select id="moMoment"><option value="pre">Antes del partido</option><option value="live">En vivo</option><option value="all">Todos</option></select></div>
       <div class="ctl"><label for="moValue">Picks</label><select id="moValue"><option value="all">Todos los del modelo</option><option value="value">Solo con valor según el momio</option><option value="strong">Solo con margen (≥1% de la línea)</option></select></div>
@@ -1638,6 +1638,24 @@ function modelOddsRowsCalc(){
   if(days && out.length){ const last = out.map(r=>r.date).sort().at(-1), from = addDays(last, -days+1); return out.filter(r=>r.date>=from); }
   return out;
 }
+// Partido por partido con los cuatro modelos lado a lado
+function allModelsTable(rows){
+  if(!rows.length) return '';
+  const G = new Map();
+  for(const r of rows){ const k = r.id+'|'+r.label; const g = G.get(k) || { ...r, by:{} }; g.by[r.mo] = r; G.set(k, g); }
+  const list = [...G.values()].sort((x,y)=> y.date.localeCompare(x.date) || String(x.label).localeCompare(String(y.label)));
+  const cell = r => !r ? '<td class="n note">—</td>'
+    : `<td class="n">${fmt(r.p)}${r.how==='recalc'?'<span class="note">*</span>':r.how==='auto'?'<span class="note">°</span>':''} <span class="${r.res==='W'?'res-W':r.res==='L'?'res-L':'res-P'}" title="${r.side}">${r.side==='OVER'?'O':'U'} ${r.res==='W'?'✓':r.res==='L'?'✗':'='}</span></td>`;
+  const tot = mo => { const R = rows.filter(r=>r.mo===mo), w = R.filter(r=>r.res==='W').length, l = R.filter(r=>r.res==='L').length;
+    return `<td class="n"><b>${w+l ? (100*w/(w+l)).toFixed(1)+'%' : '—'}</b> <span class="note">${w}-${l}</span></td>`; };
+  const err = mo => { const R = rows.filter(r=>r.mo===mo); return `<td class="n">${R.length ? fmt(mean(R.map(r=>Math.abs(r.act - r.p))),1) : '—'}</td>`; };
+  return `<thead><tr><th>Fecha</th><th>Partido</th><th>Momento</th><th class="n">Línea</th><th class="n">Real</th>${ALL_MODELS.map(mo=>`<th class="n">${MODEL_LBL[mo].replace(' (promedios + jugadores)','')}</th>`).join('')}</tr></thead><tbody>
+    ${list.map(g=>`<tr><td>${g.date}</td><td style="white-space:nowrap">${badge(g.a)} @ ${badge(g.h)}</td><td>${g.label}</td>
+      <td class="n">${fmt(g.line)} <span class="note">${g.src}</span></td><td class="n"><b>${g.act}</b> <span class="note">${g.act>g.line?'O':g.act<g.line?'U':'='}</span></td>
+      ${ALL_MODELS.map(mo=>cell(g.by[mo])).join('')}</tr>`).join('')}
+    <tr class="sumrow"><td colspan="5">% de acierto (récord)</td>${ALL_MODELS.map(tot).join('')}</tr>
+    <tr class="sumrow2"><td colspan="5">Error medio de la proyección vs. el real</td>${ALL_MODELS.map(err).join('')}</tr></tbody>`;
+}
 function renderModelOdds(){
   const rows = modelOddsRows(), selM = $('moModel').value;
   const pct = (a,b) => b ? (100*a/b).toFixed(1)+'%' : '—';
@@ -1662,12 +1680,13 @@ function renderModelOdds(){
       <td class="n">${mine.some(r=>r.units!=null)?(100*mine.reduce((t,r)=>t+(r.units||0),0)/mine.filter(r=>r.units!=null).length).toFixed(1)+'%':'—'}</td><td class="n">—</td></tr></tbody>`;
   const det = selM || S.moSel;
   const D = det ? rows.filter(r=>r.mo===det).sort((x,y)=>y.date.localeCompare(x.date)) : [];
-  $('moDetail').innerHTML = det ? (D.length ? `<thead><tr><th>Fecha</th><th>Partido</th><th>Momento</th><th class="n">Línea</th><th class="n">Momio</th><th class="n">${MODEL_LBL[det]}</th><th>Lado</th><th class="n">Valor</th><th class="n">Real</th><th>Res.</th><th class="n">Unid.</th></tr></thead><tbody>${
+  if(!det){ $('moDetail').innerHTML = allModelsTable(rows); }
+  else $('moDetail').innerHTML = (D.length ? `<thead><tr><th>Fecha</th><th>Partido</th><th>Momento</th><th class="n">Línea</th><th class="n">Momio</th><th class="n">${MODEL_LBL[det]}</th><th>Lado</th><th class="n">Valor</th><th class="n">Real</th><th>Res.</th><th class="n">Unid.</th></tr></thead><tbody>${
     D.map(r=>`<tr><td>${r.date}</td><td style="white-space:nowrap">${badge(r.a)} @ ${badge(r.h)}</td><td>${r.label}</td><td class="n">${fmt(r.line)} <span class="note">${r.src}</span></td><td class="n">${r.assumed?'<span class="note">−110</span>':r.raw}</td>
       <td class="n">${fmt(r.p)}${r.how==='recalc'?' <span class="note" title="Recalculado con los datos previos a esa fecha (no había foto previa)">*</span>':r.how==='auto'?' <span class="note" title="Foto automática antes del partido">°</span>':''}</td>
       <td><span class="pill ${r.side==='OVER'?'over':'under'}">${r.side}</span></td><td class="n" style="${col(r.ev)}">${r.ev!=null?sgn(r.ev*100,1)+'%':'—'}</td>
       <td class="n">${r.act}</td><td class="res-${r.res}">${r.res==='W'?'Ganado':r.res==='L'?'Perdido':'Push'}</td><td class="n" style="${col(r.units)}">${r.units==null?'—':sgn(r.units,2)}</td></tr>`).join('')}</tbody>`
-    : `<tr><td class="empty">Sin picks de ${MODEL_LBL[det]} con estos filtros.</td></tr>`) : '';
+    : `<tr><td class="empty">Sin picks de ${MODEL_LBL[det]} con estos filtros.</td></tr>`);
   $('moFoot').innerHTML = `Línea: la última que capturaste antes del partido (o en vivo); si no capturaste y el parámetro es Puntos, la de <b>DraftKings</b> ("mercado"). Momio: el que capturaste o el de DraftKings; si no hay, se supone −110.
     Proyección: la foto que se guardó al capturar tu línea; si no, la <b>foto automática</b> que la app toma antes del partido cuando la abres ese día (°); si tampoco, se recalcula con los datos previos (*).
     <b>Unidades</b>: ganancia apostando 1 por pick (ganado = momio decimal − 1, perdido = −1). <b>ROI</b> = unidades ÷ picks con momio. Arriba de 52.4% de acierto le gana a un momio de −110 (1.91).
