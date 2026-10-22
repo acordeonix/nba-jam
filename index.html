@@ -348,6 +348,17 @@ tr.click{cursor:pointer}
     </div>
     <div class="kpis" id="sgKpis"></div>
     <div id="sgChart"></div>
+    <h2 style="margin-top:18px;font-size:19px">Cada modelo con tus líneas y momios</h2>
+    <p class="sub">Cada partido terminado, aunque no hayas hecho pick: qué lado recomendaba cada modelo <b>antes del partido</b> contra la línea (la tuya o la de DraftKings), si acertó y cuánto habría ganado apostando 1 unidad con el momio. Toca un modelo para ver partido por partido.</p>
+    <div class="row">
+      <div class="ctl"><label for="moMoment">Momento</label><select id="moMoment"><option value="pre">Antes del partido</option><option value="live">En vivo</option><option value="all">Todos</option></select></div>
+      <div class="ctl"><label for="moValue">Picks</label><select id="moValue"><option value="all">Todos los del modelo</option><option value="value">Solo con valor según el momio</option><option value="strong">Solo con margen (≥1% de la línea)</option></select></div>
+      <div class="ctl"><label for="moLine">Línea</label><select id="moLine"><option value="any">La mía; si no, mercado</option><option value="mine">Solo las que capturé</option><option value="market">Solo mercado (DraftKings)</option></select></div>
+      <div class="ctl"><label for="moModel">Modelo</label><select id="moModel"><option value="">Todos</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option><option value="pace">Ritmo × eficiencia</option></select></div>
+    </div>
+    <div class="tablewrap"><table id="moTable"></table></div>
+    <div class="tablewrap" style="margin-top:10px"><table id="moDetail"></table></div>
+    <p class="note" id="moFoot"></p>
     <h2 style="margin-top:18px;font-size:19px">Promedios vs. Mixto</h2>
     <p class="sub">Los mismos partidos con cada modelo (resto de la configuración igual). "Cuando coinciden" = Promedios y Mixto quedaron del mismo lado de la línea.</p>
     <div class="tablewrap"><table id="sgModels"></table></div>
@@ -444,13 +455,14 @@ const store = {
 const S = {
   games: [], meta: null, slateFile: [],
   metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: 'off', model: store.get('model','mix'), rest: store.get('rest','on'), stake: store.get('stake', 100),
+  snaps: store.get('snaps', {}),
   lines: store.get('lines', {}), hist: store.get('hist', {}), odds: store.get('odds', {}), picks: store.get('picks', []), manual: store.get('manual', []),
   live: [], liveOk: null, eqSort: store.get('eqSort', ['tot', -1]),
 };
 
 const $ = id => document.getElementById(id);
 // Sincronización en la nube: sync.js reemplaza estas funciones si hay configuración de Firebase
-const Sync = { on:false, savePick(){}, deletePick(){}, saveLine(){}, saveManual(){}, loadLeague(){} };
+const Sync = { on:false, savePick(){}, deletePick(){}, saveLine(){}, saveManual(){}, loadLeague(){}, saveSnap(){} };
 const pickId = p => p.uid || String(p.created||'').replace(/[^0-9A-Za-z]/g,'');
 const fmt = (v, d=1) => v==null || Number.isNaN(v) ? '—' : Number(v).toFixed(d);
 const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
@@ -619,23 +631,23 @@ function playerProject(g, team, opp, ha, baseF, metric=S.metric){
     cands = teamRotation(PL, team, S.asOf).filter(r => !isOut(inj[r.aid])).map(r => ({ aid:r.aid, L:r.L, starter:r.lastStarter }));
     source = 'prob';
   }
-  const list = [], gi = gameIndex(), tf = METRICS[metric==='q1'||metric==='h1' ? 'pts' : metric].f;
-  for(const c of cands){
-    const W = playerWindow(c.L || before(c.aid)).filter(o => o.r[PC.min] > 0 && pval(o.r, sk)!=null);
-    if(!W.length){ list.push({ aid:c.aid, starter:c.starter, gp:0, min:0, rate:null }); continue; }
+  const gi = gameIndex(), tf = METRICS[metric==='q1'||metric==='h1' ? 'pts' : metric].f;
+  const relCache = {};
+  // rel = lo que produce por minuto ÷ lo que produce su equipo por minuto en esos mismos juegos (1 = promedio del equipo)
+  const playerInfo = (aid, L) => {
+    if(relCache[aid]) return relCache[aid];
+    const W = playerWindow(L || before(aid)).filter(o => o.r[PC.min] > 0 && pval(o.r, sk)!=null);
+    if(!W.length) return (relCache[aid] = { gp:0, min:0, rel:null });
     const mins = W.reduce((t,o)=>t+o.r[PC.min],0), tot = W.reduce((t,o)=>t+pval(o.r,sk),0);
-    // lo que habría producido en esos minutos alguien al ritmo promedio de su equipo en esos mismos juegos
     let exp = 0;
     for(const o of W){ const gg = gi.get(o.gid); if(!gg) continue; const side = norm(gg.h.t)===o.team ? gg.h : gg.a; const ts = tf(side);
       if(ts==null) continue; const tm = 5*(48 + 5*Math.max(0, (side.q?.length||4) - 4)); exp += ts * o.r[PC.min] / tm; }
-    list.push({ aid:c.aid, starter:c.starter, gp:W.length, min:mins/W.length, rate: mins ? tot/mins : null, rel: exp > 0 ? Math.min(3, tot/exp) : null });
-  }
-  const sumMin = list.reduce((t,x)=>t+x.min,0);
-  if(!sumMin) return null;
-  // Minutos: los titulares y los siguientes con más minutos (8 en total) conservan los suyos; el resto se reparte lo que queda hasta 240
+    return (relCache[aid] = { gp:W.length, min:mins/W.length, rel: exp > 0 ? Math.min(3, tot/exp) : null });
+  };
   const TM = 240;
-  list.sort((x,y)=> (!!y.starter - !!x.starter) || (y.min - x.min));
-  {
+  // Minutos: titulares y los siguientes con más minutos (8 en total) conservan los suyos; al resto se le reparte lo que falte para 240
+  const allocate = list => {
+    list.sort((x,y)=> (!!y.starter - !!x.starter) || (y.min - x.min));
     const top = list.slice(0, 8), rest = list.slice(8);
     const sT = top.reduce((t,x)=>t+x.min,0), sR = rest.reduce((t,x)=>t+x.min,0);
     if(sT >= TM){ for(const x of top) x.emin = x.min*TM/sT; for(const x of rest) x.emin = 0; }
@@ -644,17 +656,32 @@ function playerProject(g, team, opp, ha, baseF, metric=S.metric){
       for(const x of top) x.emin = x.min; for(const x of rest) x.emin = x.min*kr;
       if(sR*kr < left && sT < TM){ const kt = Math.min((TM - sR*kr)/sT, 1.15); for(const x of top) x.emin = x.min*kt; }
     }
+    const fill = Math.max(0, TM - list.reduce((t,x)=>t+x.emin,0));
+    return { fill, q: (list.reduce((t,x)=>t + (x.rel ?? 0.85)*x.emin, 0) + fill*0.85) / TM };   // sin datos o suplente: 85%
+  };
+  // solo rotación: jugadores con 10+ minutos promedio (o titulares); los de relleno no cambian el índice
+  const MINR = window.__MINR ?? 10;
+  const list = cands.map(c => ({ aid:c.aid, starter:c.starter, ...playerInfo(c.aid, c.L) })).filter(x => x.starter || x.min >= MINR || !x.gp);
+  if(!list.some(x=>x.min)) return null;
+  const { fill, q } = allocate(list);
+  // Alineación habitual: los que jugaron con este equipo en los juegos de su ventana, calculada igual (así se cancela el sesgo del método)
+  // Referencia: el índice promedio de las alineaciones que de verdad jugó el equipo en los juegos de su ventana
+  // (el promedio del equipo ya trae sus bajas de siempre; así se compara contra eso y se cancela el sesgo del método)
+  const T = teamStats(team, ha), qs = [];
+  for(const x of T.logs || []){
+    const ps = (PL.byGame[x.id] || []).filter(o => o.team===team);
+    if(!ps.length) continue;
+    const rl = ps.map(o => ({ aid:o.r[PC.aid], starter:o.r[PC.st]===1, ...playerInfo(o.r[PC.aid]) })).filter(y => y.starter || y.min >= MINR || !y.gp);
+    if(rl.some(y=>y.min)) qs.push(allocate(rl).q);
   }
-  // Índice de alineación: cada jugador produce "rel" veces lo que su equipo produce por minuto (1 = como el promedio del equipo).
-  // Suma de rel × minutos / 240 = qué tan fuerte es esta alineación frente a la habitual (1.00 = igual).
-  const fill = Math.max(0, TM - list.reduce((t,x)=>t+x.emin,0));
-  const q = (list.reduce((t,x)=>t + (x.rel ?? 0.85)*x.emin, 0) + fill*0.85) / TM;   // sin datos o suplente: 85% del promedio
-  const LAM = 0.6;                                                                  // rendimientos decrecientes
-  const qq = 1 + LAM*(q - 1);
+  const qRef = qs.length ? mean(qs) : 1;
+  const qr = qRef > 0 ? q / qRef : q;                       // > 1: alineación de hoy más fuerte que la habitual
+  const LAM = 0.3;                                           // en la temporada pasada, el índice explicó ~20–30% de la diferencia
+  const qq = Math.min(1.06, Math.max(0.92, 1 + LAM*(qr - 1))); // tope +6% / −8%
   const f = baseF * qq;
   for(const x of list) x.proj = f * (x.rel ?? 0.85) * x.emin / (q*TM);
   list.sort((x,y)=> (y.emin||0)-(x.emin||0));
-  return { f, q, qq, fill, source, list, n: list.filter(x=>x.emin>=1).length };
+  return { f, q: qr, qq, qAbs:q, qRef, fill, source, list, n: list.filter(x=>x.emin>=1).length };
 }
 
 // Inicio de temporada: en la temporada anterior, cuánto más (o menos) se produjo en el primer mes que en toda la temporada.
@@ -756,7 +783,8 @@ async function loadLive(date){
         return { t:norm(c.team.abbreviation), tid:String(c.team.id ?? ''), st, q };
       };
       const od = (comp.odds||[])[0];
-      const mk = od && od.overUnder!=null && !Number.isNaN(Number(od.overUnder)) ? { ou:Number(od.overUnder), sp: od.spread!=null ? Number(od.spread) : null, p: od.provider?.name || '', det: od.details || '' } : null;
+      const mk = od && od.overUnder!=null && !Number.isNaN(Number(od.overUnder)) ? { ou:Number(od.overUnder), sp: od.spread!=null ? Number(od.spread) : null, p: od.provider?.name || '', det: od.details || '',
+        o: od.overOdds ?? od.total?.over?.close?.odds ?? null, u: od.underOdds ?? od.total?.under?.close?.odds ?? null } : null;
       return { id:ev.id, date, start:ev.date, type:ev.season?.type, state:ev.status?.type?.state, detail:ev.status?.type?.shortDetail,
         period:ev.status?.period, clock:ev.status?.displayClock, h:side('home'), a:side('away'), mk };
     });
@@ -1112,11 +1140,40 @@ const lineKey = (id, m=S.metric) => `${id}|${m}`;
 function finalFromDB(id){ return S.games.find(g=>g.id===id); }
 let _rendering = false, _again = false;
 function renderCards(){
+  scheduleSnaps();
   if(_rendering){ _again = true; return; }   // evita re-dibujar dentro de otro dibujado (blur → change)
   _rendering = true;
   try{
     do { _again = false; S.asOf = $('slateDate').value || null; try{ renderCardsInner(); } finally { S.asOf = null; } } while(_again);
   } finally { _rendering = false; }
+}
+// Foto automática antes del partido: lo que dice cada modelo (sin línea), para calificarlo después aunque no hagas pick.
+// Se actualiza mientras el partido no empieza (cada 30 min como máximo). Puntos siempre, más el parámetro que estés viendo.
+let _snapT = null;
+function scheduleSnaps(){ clearTimeout(_snapT); _snapT = setTimeout(autoSnaps, 800); }
+function autoSnaps(){
+  const PL = plFor(S.season); if(!PL) return;
+  const date = $('slateDate').value, now = Date.now(), changed = new Set();
+  const sv = { metric:S.metric, model:S.model, asOf:S.asOf };
+  try{
+    S.asOf = date;
+    for(const g of S.live){
+      if(g.state!=='pre' || !g.start || Date.parse(g.start) <= now) continue;
+      const rec = S.snaps[g.id] ||= { m:{} };
+      for(const metric of [...new Set(['pts', sv.metric])]){
+        const cur = rec.m[metric]; if(cur && now - cur.ts < 30*60e3) continue;
+        S.metric = metric; const out = { ts:now };
+        for(const mo of ALL_MODELS){
+          S.model = mo; const P = project(g.h.t, g.a.t, null, null, g);
+          if(P.proj==null || ((mo==='players'||mo==='mix') && !P.plm)) continue;
+          out[mo] = { p:+P.proj.toFixed(2), s: P.sig!=null ? +P.sig.toFixed(2) : null };
+        }
+        if(Object.keys(out).length > 1){ rec.m[metric] = out; changed.add(g.id); }
+      }
+      if(g.mk) rec.mk = g.mk;
+    }
+  } finally { Object.assign(S, sv); }
+  if(changed.size){ store.set('snaps', S.snaps); for(const id of changed) Sync.saveSnap(id); }
 }
 function renderCardsInner(){
   const m = METRICS[S.metric];
@@ -1237,12 +1294,25 @@ function evalCard(card, line){
   return { g, P, LV, cur, el, E: LV || P };
 }
 function cardGame(card){ return S.live.find(x=>x.id===card.dataset.id) || null; }
+// Foto de lo que decía cada modelo en el momento de capturar la línea (para evaluarlos después en Seguimiento)
+const ALL_MODELS = ['avg','pace','players','mix'];
+function modelSnapshots(card, line){
+  const out = {}, sv = S.model;
+  try{
+    for(const mo of ALL_MODELS){
+      S.model = mo; const { P, E } = evalCard(card, line);
+      if((mo==='players' || mo==='mix') && !P.plm) continue;     // sin datos de jugadores: no se guarda
+      if(E.proj!=null) out[mo] = { p:+E.proj.toFixed(2), po: E.pOver!=null ? +E.pOver.toFixed(3) : null };
+    }
+  } finally { S.model = sv; }
+  return out;
+}
 function logLine(card, key, line){
   const { g, LV, P, cur, el, E } = evalCard(card, line);
   const od = S.odds[key] || {};
   const entry = { ts:Date.now(), min: el ?? 0, label: g ? momentLabel(g) : 'Pre', line, cur: g?.state==='in' ? cur : null,
     proj: E.proj!=null ? +E.proj.toFixed(2) : null, pOver: E.pOver!=null ? +E.pOver.toFixed(3) : null,
-    oO: od.o || null, oU: od.u || null };
+    oO: od.o || null, oU: od.u || null, models: modelSnapshots(card, line) };
   const H = (S.hist[key] ||= []);
   const last = H.at(-1);
   if(last && last.label===entry.label && Math.abs(last.min-entry.min)<0.5) H[H.length-1] = entry; else H.push(entry);
@@ -1439,6 +1509,7 @@ function renderSeguimiento(){
   if(days && rows.length){ const last = rows.at(-1).date, from = addDays(last, -days+1); rows = rows.filter(r=>r.date>=from); }
   const T = $('sgTeam').value;
   const rowsT = T ? rows.filter(r=>r.h===T || r.a===T) : rows;
+  renderModelOdds();
   if(!rowsT.length){
     $('sgKpis').innerHTML = ''; $('sgChart').innerHTML = ''; $('sgTeams').innerHTML = ''; $('sgGames').innerHTML = '<tr><td class="empty">Todavía no hay partidos para evaluar (cada equipo necesita 5 juegos previos). Para ver cómo funciona, elige la temporada pasada arriba.</td></tr>'; $('sgFoot').textContent='';
     return;
@@ -1507,6 +1578,104 @@ function renderSeguimiento(){
   $('sgFoot').innerHTML = `<b>Error</b> = real − proyección (positivo: salió más de lo proyectado). <b>Error del equipo</b> compara lo que produjo cada equipo con su propia proyección; un número bajo = equipo predecible. <b>Sesgo</b> positivo = suele quedar arriba de la proyección (tiende al OVER), negativo = abajo (tiende al UNDER).
     <b>Acierto del lado</b> usa la línea que capturaste para ese partido y, si no hay y el parámetro es Puntos, la del mercado (DraftKings); arriba de 52.4% le gana a un momio de -110. Se cuentan los equipos con al menos 5 juegos previos; no incluye el ajuste por bajas.`;
 }
+// ---------- cada modelo con las líneas y momios que capturaste ----------
+const _moCache = new Map();
+function modelOddsRows(){
+  const ck = [S.season, S.metric, S.win, S.split, S.stat, S.rest, $('moMoment').value, $('moValue').value, $('moLine').value, $('sgRange').value, $('sgTeam').value,
+    S.games.length, JSON.stringify(S.hist).length, JSON.stringify(S.snaps).length, !!plFor(S.season)].join('|');
+  if(_moCache.has(ck)) return _moCache.get(ck);
+  if(_moCache.size > 30) _moCache.clear();
+  const r = modelOddsRowsCalc(); _moCache.set(ck, r); return r;
+}
+function modelOddsRowsCalc(){
+  const m = S.metric, f = METRICS[m].f, moment = $('moMoment').value, filt = $('moValue').value, lsrc = $('moLine').value;
+  const days = Number($('sgRange').value), T = $('sgTeam').value;
+  const out = [];
+  const sv = { asOf:S.asOf, model:S.model };
+  const odd = v => v==null || v==='' ? null : String(v);
+  try{
+    for(const db of seasonGames()){
+      const h = norm(db.h.t), a = norm(db.a.t);
+      if(T && h!==T && a!==T) continue;
+      const act = f(db.h)!=null && f(db.a)!=null ? f(db.h) + f(db.a) : null; if(act==null) continue;
+      const key = lineKey(db.id, m), H = S.hist[key] || [];
+      const myPre = H.filter(x => x.label==='Pre' && x.line!=null).at(-1), myLive = H.filter(x => x.label!=='Pre' && x.label!=='Final' && x.line!=null).at(-1);
+      const mkt = m==='pts' && db.mk?.ou!=null ? { label:'Pre', line:db.mk.ou, oO:odd(db.mk.o), oU:odd(db.mk.u), src:'mercado' } : null;
+      const entries = [];
+      if(moment!=='live'){
+        const pre = lsrc==='market' ? mkt : lsrc==='mine' ? (myPre && { ...myPre, src:'tuya' }) : (myPre ? { ...myPre, src:'tuya' } : mkt);
+        if(pre) entries.push(pre);
+      }
+      if(moment!=='pre' && lsrc!=='market' && myLive) entries.push({ ...myLive, src:'tuya' });
+      for(const e of entries){
+        const L = Number(e.line), isLive = e.label!=='Pre';
+        for(const mo of ALL_MODELS){
+          let p = e.models?.[mo]?.p, po = e.models?.[mo]?.po, how = 'foto';
+          if(p==null && !isLive){ const sn = S.snaps[db.id]?.m?.[m]?.[mo]; if(sn){ p = sn.p; po = sn.s ? 1 - phi((L - p)/sn.s) : null; how = 'auto'; } }
+          if(p==null){
+            if(isLive) continue;                                  // en vivo sin foto no se puede reconstruir
+            S.asOf = db.date; S.model = mo;
+            const P = project(h, a, L, null, db);
+            if(P.proj==null || ((mo==='players'||mo==='mix') && !P.plm)) continue;
+            p = P.proj; po = P.pOver; how = 'recalc';
+          }
+          if(p===L) continue;
+          const side = p > L ? 'OVER' : 'UNDER';
+          let raw = side==='OVER' ? e.oO : e.oU, assumed = false;
+          if(!oddsDec(raw)){ raw = '-110'; assumed = true; }          // sin momio: se supone −110
+          const dec = oddsDec(raw);
+          const pS = po!=null ? (side==='OVER' ? po : 1-po) : null;
+          const ev = dec && pS!=null ? pS*dec - 1 : null;
+          if(filt==='value' && !(ev > 0)) continue;
+          if(filt==='strong' && Math.abs(p - L) < Math.max(0.5, 0.01*L)) continue;
+          const res = act===L ? 'P' : (act > L) === (side==='OVER') ? 'W' : 'L';
+          const units = res==='W' ? dec-1 : res==='L' ? -1 : 0;
+          out.push({ key, id:db.id, date:db.date, h, a, mo, label:e.label, line:L, src:e.src, p, side, act, res, raw, assumed, dec, ev, units, how });
+        }
+      }
+    }
+  } finally { S.asOf = sv.asOf; S.model = sv.model; }
+  if(days && out.length){ const last = out.map(r=>r.date).sort().at(-1), from = addDays(last, -days+1); return out.filter(r=>r.date>=from); }
+  return out;
+}
+function renderModelOdds(){
+  const rows = modelOddsRows(), selM = $('moModel').value;
+  const pct = (a,b) => b ? (100*a/b).toFixed(1)+'%' : '—';
+  const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
+  const models = selM ? [selM] : ALL_MODELS;
+  // tus picks reales del mismo parámetro y temporada, para comparar
+  const mine = S.picks.filter(p => p.metric===S.metric && finalFromDB(p.id)?.season == S.season && (!$('sgTeam').value || p.h===$('sgTeam').value || p.a===$('sgTeam').value))
+    .filter(p => $('moMoment').value==='all' || (($('moMoment').value==='live') === ((p.phase||'pre')==='vivo'))).map(p => ({ ...p, ...gradePick(p) })).filter(p => p.res);
+  const line = (lbl, R, mo, hl) => { const W = R.filter(r=>r.res==='W').length, Lo = R.filter(r=>r.res==='L').length, Pu = R.filter(r=>r.res==='P').length;
+    const U = R.filter(r=>r.units!=null), u = U.reduce((t,r)=>t+r.units,0), dec = U.length ? mean(U.map(r=>r.dec)) : null;
+    return `<tr class="click ${hl?'best':''}" data-mo="${mo}"><td>${lbl}</td><td class="n">${R.length}</td><td class="n">${W}-${Lo}${Pu?'-'+Pu:''}</td><td class="n"><b>${pct(W, W+Lo)}</b></td>
+      <td class="n" style="${col(u)}">${U.length?sgn(u,2):'—'}</td><td class="n">${U.length?(100*u/U.length).toFixed(1)+'%':'—'}</td><td class="n">${dec?dec.toFixed(2):'—'}</td></tr>`; };
+  if(!rows.length && !mine.length){
+    $('moTable').innerHTML = '<tr><td class="empty">Todavía no hay partidos terminados con línea en este parámetro. En Puntos se usa sola la de DraftKings; en los demás parámetros captura tu línea en Partidos antes de que empiece el juego.</td></tr>';
+    $('moDetail').innerHTML = ''; $('moFoot').textContent = ''; return;
+  }
+  $('moTable').innerHTML = `<thead><tr><th>Modelo</th><th class="n">Picks</th><th class="n">Récord</th><th class="n">% acierto</th><th class="n">Unidades</th><th class="n">ROI</th><th class="n">Momio prom.</th></tr></thead><tbody>
+    ${models.map(mo => line(MODEL_LBL[mo], rows.filter(r=>r.mo===mo), mo, S.moSel===mo || selM===mo)).join('')}
+    <tr class="sumrow"><td>Tus picks reales</td><td class="n">${mine.length}</td><td class="n">${mine.filter(r=>r.res==='W').length}-${mine.filter(r=>r.res==='L').length}</td>
+      <td class="n"><b>${pct(mine.filter(r=>r.res==='W').length, mine.filter(r=>r.res==='W'||r.res==='L').length)}</b></td>
+      <td class="n" style="${col(mine.reduce((t,r)=>t+(r.units||0),0))}">${mine.some(r=>r.units!=null)?sgn(mine.reduce((t,r)=>t+(r.units||0),0),2):'—'}</td>
+      <td class="n">${mine.some(r=>r.units!=null)?(100*mine.reduce((t,r)=>t+(r.units||0),0)/mine.filter(r=>r.units!=null).length).toFixed(1)+'%':'—'}</td><td class="n">—</td></tr></tbody>`;
+  const det = selM || S.moSel;
+  const D = det ? rows.filter(r=>r.mo===det).sort((x,y)=>y.date.localeCompare(x.date)) : [];
+  $('moDetail').innerHTML = det ? (D.length ? `<thead><tr><th>Fecha</th><th>Partido</th><th>Momento</th><th class="n">Línea</th><th class="n">Momio</th><th class="n">${MODEL_LBL[det]}</th><th>Lado</th><th class="n">Valor</th><th class="n">Real</th><th>Res.</th><th class="n">Unid.</th></tr></thead><tbody>${
+    D.map(r=>`<tr><td>${r.date}</td><td style="white-space:nowrap">${badge(r.a)} @ ${badge(r.h)}</td><td>${r.label}</td><td class="n">${fmt(r.line)} <span class="note">${r.src}</span></td><td class="n">${r.assumed?'<span class="note">−110</span>':r.raw}</td>
+      <td class="n">${fmt(r.p)}${r.how==='recalc'?' <span class="note" title="Recalculado con los datos previos a esa fecha (no había foto previa)">*</span>':r.how==='auto'?' <span class="note" title="Foto automática antes del partido">°</span>':''}</td>
+      <td><span class="pill ${r.side==='OVER'?'over':'under'}">${r.side}</span></td><td class="n" style="${col(r.ev)}">${r.ev!=null?sgn(r.ev*100,1)+'%':'—'}</td>
+      <td class="n">${r.act}</td><td class="res-${r.res}">${r.res==='W'?'Ganado':r.res==='L'?'Perdido':'Push'}</td><td class="n" style="${col(r.units)}">${r.units==null?'—':sgn(r.units,2)}</td></tr>`).join('')}</tbody>`
+    : `<tr><td class="empty">Sin picks de ${MODEL_LBL[det]} con estos filtros.</td></tr>`) : '';
+  $('moFoot').innerHTML = `Línea: la última que capturaste antes del partido (o en vivo); si no capturaste y el parámetro es Puntos, la de <b>DraftKings</b> ("mercado"). Momio: el que capturaste o el de DraftKings; si no hay, se supone −110.
+    Proyección: la foto que se guardó al capturar tu línea; si no, la <b>foto automática</b> que la app toma antes del partido cuando la abres ese día (°); si tampoco, se recalcula con los datos previos (*).
+    <b>Unidades</b>: ganancia apostando 1 por pick (ganado = momio decimal − 1, perdido = −1). <b>ROI</b> = unidades ÷ picks con momio. Arriba de 52.4% de acierto le gana a un momio de −110 (1.91).
+    <b>Con valor</b>: solo los picks donde la probabilidad del modelo × momio da más de 1. En los recalculados (*), Mixto y Jugadores usan a los que sí jugaron, así que les da una pequeña ventaja.`;
+}
+for(const id of ['moMoment','moValue','moModel','moLine']) $(id).onchange = () => { S.moSel = null; renderModelOdds(); };
+$('moTable').addEventListener('click', e => { const mo = e.target.closest('tr[data-mo]')?.dataset.mo; if(!mo) return; S.moSel = S.moSel===mo ? null : mo; renderModelOdds(); });
+
 function sgChart(rows, tol){
   // error medio y % dentro de tolerancia por semana
   const wk = {};
@@ -1966,7 +2135,7 @@ function lineupHTML(g, key){
   };
   return head + teamBlock(g.a.t,'visita') + teamBlock(g.h.t,'local') +
     `<div class="note" style="margin-top:6px">Promedios ${Number(S.win)?'últimos '+S.win+' juegos':'de temporada'} antes de esta fecha. T = titular. Los "Out" no cuentan.
-      <b>MIN est.</b> = sus minutos promedio; titulares y los 3 siguientes los conservan y al resto se le reparte lo que falte para 240. <b>Índice de alineación</b>: cuánto produce cada jugador comparado con el promedio de su equipo, por los minutos que va a jugar; 1.00 = la alineación de siempre. La proyección del equipo (a favor y en contra del rival) se mueve 60% de esa diferencia. <b>Proy.</b> = la parte de cada jugador en esa proyección.
+      <b>MIN est.</b> = sus minutos promedio; titulares y los 3 siguientes los conservan y al resto se le reparte lo que falte para 240. <b>Índice de alineación</b>: cuánto produce cada jugador comparado con el promedio de su equipo, por los minutos que va a jugar; 1.00 = la alineación de siempre. La proyección del equipo (a favor y en contra del rival) se mueve 30% de esa diferencia (es lo que se vio en la temporada pasada), con tope de +6% / −8%. <b>Proy.</b> = la parte de cada jugador en esa proyección.
       <b>Suma</b>: total de cada columna de los que juegan; los promedios suman de más porque cada jugador cuenta sus minutos completos (la suma de MIN pasa de 240). <b>Con los minutos de hoy</b>: lo que darían juntos si cada uno produce a su ritmo por minuto en sus MIN est. (equipo de 240 minutos), antes de ajustar por rival.</div></details>`;
 }
 
@@ -2195,7 +2364,7 @@ window.JAM = {
   },
   setSync(html){ $('syncBox').innerHTML = html; },
   resetUserData(){  // datos personales (no estadísticas): se limpian al cambiar de usuario
-    S.picks = []; S.lines = {}; S.hist = {}; S.odds = {}; S.manual = []; S.league = null; S.lgPlayer = null;
+    S.picks = []; S.lines = {}; S.hist = {}; S.odds = {}; S.manual = []; S.league = null; S.lgPlayer = null; S.snaps = {}; store.set('snaps', {});
     store.set('leagueCache', {});
     store.set('picks', []); store.set('lines', {}); store.set('hist', {}); store.set('odds', {}); store.set('manual', []);
     this.rerender();

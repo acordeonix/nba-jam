@@ -174,10 +174,11 @@ async function start() {
       return fb.setDoc(P('lines', key), clean({ line, hist, odds, updated: Date.now() })).catch(fail);
     };
     Sync.saveManual = () => fb.setDoc(P('meta', 'state'), clean({ manual: S.manual }), { merge: true }).catch(fail);
+    Sync.saveSnap = id => S.snaps[id] && fb.setDoc(P('snaps', String(id)), clean(S.snaps[id])).catch(fail);
   }
   function disable() {
     Sync.on = false;
-    Sync.savePick = Sync.deletePick = Sync.saveLine = Sync.saveManual = Sync.loadLeague = () => {};
+    Sync.savePick = Sync.deletePick = Sync.saveLine = Sync.saveManual = Sync.loadLeague = Sync.saveSnap = () => {};
     S.league = null;
     unsubs.forEach(u => u()); unsubs = [];
     adminUnsub?.(); adminUnsub = null;
@@ -211,7 +212,14 @@ async function start() {
   }
 
   // Escucha cambios (de este u otro dispositivo del mismo usuario)
+  // Fotos automáticas de los modelos (una por partido): se juntan por parámetro, gana la más reciente
+  const mergeSnap = (a, b) => { if (!a) return b; if (!b) return a; const m = { ...(a.m || {}) };
+    for (const [k, v] of Object.entries(b.m || {})) if (!m[k] || (v.ts || 0) > (m[k].ts || 0)) m[k] = v; return { ...a, ...b, m }; };
   function listen() {
+    unsubs.push(fb.onSnapshot(C('snaps'), snap => {
+      for (const d of snap.docs) S.snaps[d.id] = mergeSnap(S.snaps[d.id], d.data());
+      store.set('snaps', S.snaps);
+    }, e => console.warn('snaps', e)));
     unsubs.push(fb.onSnapshot(C('picks'), snap => {
       S.picks = snap.docs.map(d => d.data()).sort((a, b) => String(a.created).localeCompare(String(b.created)));
       store.set('picks', S.picks); J.rerender();
@@ -249,6 +257,8 @@ async function start() {
     }
     try {
       await merge(cp, cl, cm);
+      try { const cs = await fb.getDocs(C('snaps')); const have = new Set(cs.docs.map(d => d.id));
+        await Promise.all(Object.keys(S.snaps || {}).filter(id => !have.has(id)).map(id => fb.setDoc(P('snaps', id), clean(S.snaps[id])))); } catch (e) { console.warn('snaps', e); }
       setLast(uid);
       enable(); listen();
       ui('on', me);
