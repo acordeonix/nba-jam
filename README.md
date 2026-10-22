@@ -89,7 +89,7 @@ La temporada regular 2026-27 arranca el **20 de octubre de 2026**; a partir de a
 
 **Ajuste de inicio de temporada:** mientras la proyección use juegos de la temporada anterior, se le suma lo que el primer mes de esa temporada se produjo por encima de su promedio (en 2025-26, +1.4 puntos por equipo), en proporción a cuántos de esos juegos usa; llega a 0 cuando los equipos tienen 20 juegos.
 
-**Comparación en cada tarjeta:** Promedios y Mixto lado a lado, con la diferencia y si quedan del mismo lado de la línea (✓ los dos / ⚠ no coinciden). En *Seguimiento*, la tabla *Promedios vs. Mixto* dice cuál va atinando más y cómo les va cuando coinciden.
+**Comparación en cada tarjeta:** Ritmo y Promedios lado a lado (Ritmo × eficiencia es el modelo por defecto), con la diferencia y si quedan del mismo lado de la línea con margen (✓ los dos / parejo / ⚠ no coinciden). En *Seguimiento*, la tabla *Ritmo vs. Promedios* dice cuál va atinando más y cómo les va cuando coinciden.
 
 Controles globales: parámetro, temporada, ventana (toda / últimos 20 / 10 / 5), split local-visita, modelo (Mixto por defecto; con Mixto o Jugadores las bajas y los cambios de plantilla ya van incluidos), descanso, promedio o mediana.
 

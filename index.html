@@ -359,8 +359,8 @@ tr.click{cursor:pointer}
     <div class="tablewrap"><table id="moTable"></table></div>
     <div class="tablewrap" style="margin-top:10px"><table id="moDetail"></table></div>
     <p class="note" id="moFoot"></p>
-    <h2 style="margin-top:18px;font-size:19px">Promedios vs. Mixto</h2>
-    <p class="sub">Los mismos partidos con cada modelo (resto de la configuración igual). "Cuando coinciden" = Promedios y Mixto quedaron del mismo lado de la línea.</p>
+    <h2 style="margin-top:18px;font-size:19px">Ritmo vs. Promedios</h2>
+    <p class="sub">Los mismos partidos con cada modelo (resto de la configuración igual). "Cuando coinciden" = Ritmo y Promedios quedaron del mismo lado de la línea.</p>
     <div class="tablewrap"><table id="sgModels"></table></div>
     <h2 style="margin-top:18px;font-size:19px">Qué equipos se apegan más a la proyección</h2>
     <p class="sub">Ordenado por el error del equipo (lo que anotó o produjo él contra lo que se le proyectó). Toca un encabezado para ordenar.</p>
@@ -454,7 +454,7 @@ const store = {
 // ---------- estado ----------
 const S = {
   games: [], meta: null, slateFile: [],
-  metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: 'off', model: store.get('model','mix'), rest: store.get('rest','on'), stake: store.get('stake', 100),
+  metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: 'off', model: store.get('model','pace'), rest: store.get('rest','on'), stake: store.get('stake', 100),
   snaps: store.get('snaps', {}),
   lines: store.get('lines', {}), hist: store.get('hist', {}), odds: store.get('odds', {}), picks: store.get('picks', []), manual: store.get('manual', []),
   live: [], liveOk: null, eqSort: store.get('eqSort', ['tot', -1]),
@@ -778,8 +778,20 @@ async function loadLive(date){
       const side = ha => {
         const c = comp.competitors.find(x=>x.homeAway===ha);
         const st = {}; (c.statistics||[]).forEach(s=>st[s.name]=Number(s.displayValue));
-        const q = (c.linescores||[]).map(l=>Number(l.value ?? l.displayValue) || 0);
-        st.points = Number(c.score); st.q1 = q.length>=1 ? q[0] : null; st.h1 = q.length>=2 ? q[0]+q[1] : null;
+        // Puntos por cuarto: se acomodan por el número de periodo que trae ESPN (en vivo a veces llega un renglón vacío de más)
+        const per = ev.status?.period || 0, ls = c.linescores || [];
+        let q = [];
+        if(ls.some(l => l.period)) for(const l of ls){ const k = Number(l.period); if(k >= 1) q[k-1] = Number(l.value ?? l.displayValue) || 0; }
+        else q = ls.map(l => Number(l.value ?? l.displayValue) || 0);
+        q = Array.from({ length: q.length }, (_, i) => q[i] ?? 0);
+        st.points = Number(c.score);
+        if(ev.status?.type?.state === 'in' && per >= 1){
+          if(q.length > per) q = q.slice(0, per);
+          while(q.length < per) q.push(0);
+          const prev = q.slice(0, -1).reduce((x,y)=>x+y, 0);
+          if(Number.isFinite(st.points) && st.points - prev >= 0 && q.reduce((x,y)=>x+y,0) !== st.points) q[q.length-1] = st.points - prev;   // el cuarto actual = marcador − cuartos anteriores
+        }
+        st.q1 = q.length>=1 ? q[0] : null; st.h1 = q.length>=2 ? q[0]+q[1] : null;
         return { t:norm(c.team.abbreviation), tid:String(c.team.id ?? ''), st, q };
       };
       const od = (comp.odds||[])[0];
@@ -1097,11 +1109,9 @@ function marketOf(g, db){
 // Las dos proyecciones juntas: Promedios (tu hoja) y Mixto, y si coinciden contra la línea
 function compareHTML(P, g, h, a, line){
   if(P.proj==null) return '';
-  const cur = S.model, other = (cur==='avg' || cur==='pace') ? 'mix' : 'avg';
-  const sv = S.model; S.model = other;
-  let Q; try{ Q = project(h, a, line===''?null:line, null, g); } finally { S.model = sv; }
-  if(Q.proj==null || (other!=='avg' && !Q.plm) || ((cur==='mix' || cur==='players') && !P.plm)) return '';
-  const A = cur==='avg' ? P : Q, M = cur==='avg' ? Q : (cur==='mix' ? P : Q);
+  const calc = mo => { if(S.model===mo) return P; const sv = S.model; S.model = mo; try{ return project(h, a, line===''?null:line, null, g); } finally { S.model = sv; } };
+  const A = calc('avg'), M = calc('pace');
+  if(A.proj==null || M.proj==null || !M.pm) return '';
   const gap = M.proj - A.proj, L = line===''||line==null ? null : Number(line);
   let verdict = '';
   if(L!=null){
@@ -1113,8 +1123,8 @@ function compareHTML(P, g, h, a, line){
       : `<span class="pill">parejo · uno queda a menos de ${fmt(thr)} de la línea</span>`;
   } else verdict = Math.abs(gap) >= 6 ? '<span class="pill warn">⚠ se separan</span>' : Math.abs(gap) <= 3 ? '<span class="note">coinciden</span>' : '';
   return `<div class="cmp"><span class="k">Comparación</span>
+    <span>Ritmo <b>${fmt(M.proj)}</b>${L!=null?` <span class="note">(${sgn(M.proj-L)})</span>`:''}</span>
     <span>Promedios <b>${fmt(A.proj)}</b>${L!=null?` <span class="note">(${sgn(A.proj-L)})</span>`:''}</span>
-    <span>Mixto <b>${fmt(M.proj)}</b>${L!=null?` <span class="note">(${sgn(M.proj-L)})</span>`:''}</span>
     <span class="note">diferencia ${sgn(gap)}${Math.abs(gap)>=6?' · revisa Alineaciones':''}</span> ${verdict}</div>`;
 }
 function modelNote(P, g, db, h, a, m){
@@ -1533,7 +1543,7 @@ function renderSeguimiento(){
   const filt = R => { let r = R; if(days && r.length){ const last = r.at(-1).date, from2 = addDays(last, -days+1); r = r.filter(x=>x.date>=from2); } return T ? r.filter(x=>x.h===T||x.a===T) : r; };
   const byModel = {};
   for(const mo of ['avg','mix','players','pace']){ const sv = S.model; S.model = mo; try{ byModel[mo] = filt(trackRows()); } finally { S.model = sv; } }
-  const ids = new Map(byModel.mix.map(r=>[r.id, r]));
+  const ids = new Map(byModel.pace.map(r=>[r.id, r]));
   const both = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) === (ids.get(r.id).proj>r.line)));
   const split = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) !== (ids.get(r.id).proj>r.line)));
   const mrow = (lbl, R) => { const sr = R.filter(r=>r.side!=null), w = sr.filter(r=>r.side).length;
@@ -1541,8 +1551,8 @@ function renderSeguimiento(){
   const bw = both.filter(r=>r.side).length, sw = split.filter(r=>r.side).length, smw = split.filter(r=>ids.get(r.id).side).length;
   $('sgModels').innerHTML = `<thead><tr><th>Modelo</th><th class="n">Partidos</th><th class="n">Error medio</th><th class="n">Sesgo</th><th class="n">Acierto del lado</th></tr></thead><tbody>
     ${mrow('Promedios', byModel.avg)}${mrow('Mixto (promedios + jugadores)', byModel.mix)}${mrow('Jugadores', byModel.players)}${mrow('Ritmo × eficiencia', byModel.pace)}
-    <tr class="sumrow"><td>Cuando coinciden Promedios y Mixto</td><td class="n">${both.length}</td><td></td><td></td><td class="n">${both.length?`${pct(bw,both.length)} <span class="note">(${bw}-${both.length-bw})</span>`:'—'}</td></tr>
-    <tr><td>Cuando no coinciden: acierta Promedios / Mixto</td><td class="n">${split.length}</td><td></td><td></td><td class="n">${split.length?`${pct(sw,split.length)} / ${pct(smw,split.length)}`:'—'}</td></tr></tbody>`;
+    <tr class="sumrow"><td>Cuando coinciden Ritmo y Promedios</td><td class="n">${both.length}</td><td></td><td></td><td class="n">${both.length?`${pct(bw,both.length)} <span class="note">(${bw}-${both.length-bw})</span>`:'—'}</td></tr>
+    <tr><td>Cuando no coinciden: acierta Promedios / Ritmo</td><td class="n">${split.length}</td><td></td><td></td><td class="n">${split.length?`${pct(sw,split.length)} / ${pct(smw,split.length)}`:'—'}</td></tr></tbody>`;
 
   // por equipo
   const byT = {};
