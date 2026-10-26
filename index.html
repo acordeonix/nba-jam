@@ -234,6 +234,8 @@ tr.click{cursor:pointer}
         <select id="model"><option value="avg">Promedios (tu hoja)</option><option value="pace">Ritmo × eficiencia</option><option value="players">Jugadores (alineación)</option><option value="mix">Mixto: promedios + jugadores</option></select></div>
       <div class="ctl"><label for="rest">Descanso</label>
         <select id="rest"><option value="on">Ajustar back-to-back</option><option value="off">Sin ajuste</option></select></div>
+      <div class="ctl"><label for="early">Inicio de temporada</label>
+        <select id="early"><option value="off">Sin ajuste</option><option value="on">Sumar lo del 1er mes pasado</option></select></div>
       <div class="ctl"><label for="stat">Cálculo</label>
         <select id="stat"><option value="mean">Promedio</option><option value="median">Mediana</option></select></div>
     </div>
@@ -398,7 +400,10 @@ tr.click{cursor:pointer}
     <h2 style="margin-top:18px;font-size:19px">Combinaciones de modelos</h2>
     <p class="sub">Cuando varias señales recomiendan el mismo lado contra la línea, ¿se acierta más? Señales: Ritmo, Promedios, Mixto, Jugadores e Historial directo (mayoría de enfrentamientos previos). Usa los mismos partidos, líneas y momios de la tabla de arriba (antes del partido).</p>
     <div class="row"><div class="ctl"><label for="cbMin">Mín. partidos</label><input type="number" id="cbMin" min="1" value="3" style="width:70px"></div>
-      <div class="ctl"><label for="cbSize">Mostrar</label><select id="cbSize"><option value="12">Señales solas y pares</option><option value="123">Hasta tríos</option><option value="all">Todas las combinaciones</option></select></div></div>
+      <div class="ctl"><label for="cbSize">Mostrar</label><select id="cbSize"><option value="12">Señales solas y pares</option><option value="123">Hasta tríos</option><option value="all">Todas las combinaciones</option></select></div>
+      <div class="ctl"><label for="cbInv">Apostar</label><select id="cbInv"><option value="fav">A favor (lo que dicen)</option><option value="both">A favor y en contra</option><option value="inv">Solo en contra (inversa)</option></select></div>
+      <div class="ctl"><label for="cbFrom">Contar desde</label><input type="date" id="cbFrom"></div>
+      <div class="ctl"><label for="cbFind">Buscar</label><input type="text" id="cbFind" placeholder="ej. Mixto + Historial" style="width:170px"></div></div>
     <div class="tablewrap"><table id="cbTable"></table></div>
     <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Qué tanto coinciden entre sí</h3>
     <div class="tablewrap"><table id="cbMatrix"></table></div>
@@ -501,7 +506,7 @@ const store = {
 // ---------- estado ----------
 const S = {
   games: [], meta: null, slateFile: [],
-  metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: 'off', model: store.get('model','pace'), rest: store.get('rest','on'), stake: store.get('stake', 100),
+  metric: store.get('metric','ast'), season: null, win: store.get('win','0'), split: store.get('split','all'), stat: store.get('stat','mean'), adj: 'off', model: store.get('model','pace'), early: store.get('early','off'), rest: store.get('rest','on'), stake: store.get('stake', 100),
   snaps: store.get('snaps', {}),
   lines: store.get('lines', {}), hist: store.get('hist', {}), odds: store.get('odds', {}), picks: store.get('picks', []), manual: store.get('manual', []),
   live: [], liveOk: null, eqSort: store.get('eqSort', ['tot', -1]),
@@ -747,6 +752,7 @@ function earlyDelta(metric=S.metric){
   _earlyCache.set(key, d); return d;
 }
 function earlyAdj(H, A){
+  if((window.__EARLY ?? S.early) === 'off') return null;
   const fr = T => T.logs?.length ? T.logs.filter(x=>x.prev).length / T.logs.length : 0;
   const w = (fr(H) + fr(A))/2; if(!w) return null;
   const d = earlyDelta(); if(Math.abs(d) < 0.01) return null;
@@ -1580,7 +1586,7 @@ let _sgCache = null; const _sgMap = new Map();
 S.sgSort = store.get('sgSort', ['tmae', 1]);
 function trackRows(){
   const f = METRICS[S.metric].f;
-  const key = [S.season, S.metric, S.model, S.win, S.rest, S.split, S.stat, S.games.length, JSON.stringify(S.lines).length, JSON.stringify(S.hist).length, !!plFor(S.season)].join('|');
+  const key = [S.season, S.metric, S.model, S.win, S.rest, S.early, S.split, S.stat, S.games.length, JSON.stringify(S.lines).length, JSON.stringify(S.hist).length, !!plFor(S.season)].join('|');
   if(_sgMap.has(key)) return _sgMap.get(key);
   const logs = teamLogs(), rows = [];
   const games = seasonGames().filter(g => f(g.h)!=null && f(g.a)!=null).sort((x,y)=>x.date.localeCompare(y.date));
@@ -1775,7 +1781,7 @@ function renderSeguimiento(){
 // ---------- cada modelo con las líneas y momios que capturaste ----------
 const _moCache = new Map();
 function modelOddsRows(){
-  const ck = [S.season, S.metric, S.win, S.split, S.stat, S.rest, $('moMoment').value, $('moValue').value, $('moLine').value, $('sgRange').value, $('sgTeam').value,
+  const ck = [S.season, S.metric, S.win, S.split, S.stat, S.rest, S.early, $('moMoment').value, $('moValue').value, $('moLine').value, $('sgRange').value, $('sgTeam').value,
     S.games.length, JSON.stringify(S.hist).length, JSON.stringify(S.snaps).length, !!plFor(S.season)].join('|');
   if(_moCache.has(ck)) return _moCache.get(ck);
   if(_moCache.size > 30) _moCache.clear();
@@ -1860,7 +1866,7 @@ const _edCache = new Map();
 function edgeStats(model){
   const mo = model || S.model;
   // las líneas que capturas hoy no cambian los partidos ya terminados: se recalcula cuando hay partidos nuevos o cada 10 min
-  const ck = [mo, S.season, S.metric, S.games.length, !!plFor(S.season), $('moLine').value, Math.floor(Date.now()/600e3)].join('|');
+  const ck = [mo, S.season, S.metric, S.early, S.win, S.rest, S.games.length, !!plFor(S.season), $('moLine').value, Math.floor(Date.now()/600e3)].join('|');
   if(_edCache.has(ck)) return _edCache.get(ck);
   const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value };
   $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = '';
@@ -1925,29 +1931,33 @@ function renderCombos(){
     if(hs?.side) g.sides.hist = hs.side;
     g.res = g.act > g.line ? 'OVER' : g.act < g.line ? 'UNDER' : 'P';
   }
-  const games = [...G.values()];
+  if($('cbFrom').value==='' && store.get('cbFrom','')) $('cbFrom').value = store.get('cbFrom','');
+  const from = $('cbFrom').value;
+  const games = [...G.values()].filter(g => !from || g.date >= from);
   const keys = ['pace','avg','mix','players','hist'];
-  const minN = Number($('cbMin').value)||1, size = $('cbSize').value;
+  const minN = Number($('cbMin').value)||1, size = $('cbSize').value, inv = $('cbInv').value, find = $('cbFind').value.trim().toLowerCase();
   const combos = [];
   for(let mask=1; mask < (1<<keys.length); mask++){
     const ks = keys.filter((_,i) => mask & (1<<i));
     if(size==='12' && ks.length > 2) continue;
     if(size==='123' && ks.length > 3) continue;
-    let w=0, l=0, p=0, u=0, n=0;
+    let w=0, l=0, p=0, u=0, n=0, iu=0;
     for(const g of games){
       const ss = ks.map(k => g.sides[k]); if(ss.some(x=>!x) || new Set(ss).size !== 1) continue;
       const side = ss[0]; n++;
       if(g.res==='P'){ p++; continue; }
       const dec = g.dec[ks.find(k=>k!=='hist')] || 1.909;
-      if(side===g.res){ w++; u += dec - 1; } else { l++; u -= 1; }
+      if(side===g.res){ w++; u += dec - 1; iu -= 1; } else { l++; u -= 1; iu += 1.909 - 1; }   // la inversa se calcula con −110
     }
-    combos.push({ ks, n, w, l, p, u, acc: w+l ? w/(w+l) : null });
+    if(inv!=='inv') combos.push({ ks, n, w, l, p, u, acc: w+l ? w/(w+l) : null, inv:false });
+    if(inv!=='fav') combos.push({ ks, n, w:l, l:w, p, u:iu, acc: w+l ? l/(w+l) : null, inv:true });
   }
-  const base = combos.filter(c => c.n >= minN && c.acc!=null).sort((x,y)=> (y.acc - x.acc) || (y.n - x.n));
+  const cname = c => (c.inv ? 'EN CONTRA de ' : '') + c.ks.map(k=>SIG_LBL[k]).join(' + ');
+  const base = combos.filter(c => c.n >= minN && c.acc!=null && (!find || cname(c).toLowerCase().includes(find))).sort((x,y)=> (y.acc - x.acc) || (y.n - x.n));
   const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
   const best = base[0];
   $('cbTable').innerHTML = base.length ? `<thead><tr><th>Combinación (todas dicen lo mismo)</th><th class="n">Señales</th><th class="n">Partidos</th><th class="n">Récord</th><th class="n">% acierto</th><th class="n">Unidades</th><th class="n">ROI</th></tr></thead><tbody>${
-    base.map(c=>`<tr class="${c===best?'best':''}"><td>${c.ks.map(k=>SIG_LBL[k]).join(' + ')}</td><td class="n">${c.ks.length}</td><td class="n">${c.n}</td><td class="n">${c.w}-${c.l}${c.p?'-'+c.p:''}</td>
+    base.map(c=>`<tr class="${c===best?'best':''}"><td>${c.inv?'<span class="pill warn" style="font-size:11px">EN CONTRA</span> ':''}${c.ks.map(k=>SIG_LBL[k]).join(' + ')}</td><td class="n">${c.ks.length}</td><td class="n">${c.n}</td><td class="n">${c.w}-${c.l}${c.p?'-'+c.p:''}</td>
       <td class="n"><b>${(100*c.acc).toFixed(1)}%</b></td><td class="n" style="${col(c.u)}">${sgn(c.u,2)}</td><td class="n">${c.w+c.l?(100*c.u/(c.w+c.l+c.p)).toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody>`
     : `<tr><td class="empty">Todavía no hay suficientes partidos con línea (mínimo ${minN} por combinación).</td></tr>`;
   // matriz de coincidencia
@@ -1955,11 +1965,14 @@ function renderCombos(){
   $('cbMatrix').innerHTML = `<thead><tr><th></th>${keys.map(k=>`<th class="n">${SIG_LBL[k]}</th>`).join('')}</tr></thead><tbody>${
     keys.map(a=>`<tr><td><b>${SIG_LBL[a]}</b></td>${keys.map(b=>{ if(a===b) return '<td class="n note">—</td>'; const v = pair(a,b);
       return `<td class="n" style="background:${v==null?'transparent':`rgba(${v>0.8?'234,179,8':'34,197,94'},${(0.08+0.25*Math.abs(v-0.5)*2).toFixed(2)})`}">${v==null?'—':Math.round(100*v)+'%'}</td>`; }).join('')}</tr>`).join('')}</tbody>`;
-  $('cbFoot').innerHTML = `${games.length} partidos con línea. <b>Combinación</b>: solo cuenta los partidos donde todas esas señales recomiendan el mismo lado; el acierto es de ese lado. Unidades con el momio capturado o el de DraftKings (−110 si no hay).
+  $('cbFoot').innerHTML = `${games.length} partidos con línea${from?` desde el ${from}`:''}. <b>EN CONTRA</b>: apostar al lado opuesto de lo que dicen esas señales (unidades con −110).
+    Para probar una idea nueva (por ejemplo, ir en contra de Mixto + Historial), pon en <b>Contar desde</b> el día en que la empiezas a seguir: así solo cuentan partidos que no se usaron para descubrirla. Con 30+ partidos nuevos arriba de 55% ya es una tendencia; antes, puede ser suerte.<br> <b>Combinación</b>: solo cuenta los partidos donde todas esas señales recomiendan el mismo lado; el acierto es de ese lado. Unidades con el momio capturado o el de DraftKings (−110 si no hay).
     <b>Qué tanto coinciden</b>: % de partidos en que dos señales recomiendan lo mismo; arriba de 80% (amarillo) casi siempre dicen igual y combinarlas no agrega información. Las combinaciones útiles son las de señales que <i>no</i> siempre coinciden y aun así, cuando lo hacen, aciertan más.
     Con pocos partidos los porcentajes cambian mucho: fíjate en las que tengan 20+ partidos.`;
 }
-for(const id of ['cbMin','cbSize']) $(id).onchange = renderCombos;
+for(const id of ['cbMin','cbSize','cbInv']) $(id).onchange = renderCombos;
+$('cbFrom').onchange = e => { store.set('cbFrom', e.target.value); renderCombos(); };
+$('cbFind').oninput = renderCombos;
 
 function renderModelOdds(){
   const rows = modelOddsRows(), selM = $('moModel').value;
@@ -2620,7 +2633,7 @@ $('mAdd').onclick = () => { const h=$('mHome').value, a=$('mAway').value; if(h==
 
 // ---------- controles ----------
 $('metric').innerHTML = Object.entries(METRICS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
-for(const [id,key] of [['metric','metric'],['win','win'],['split','split'],['stat','stat'],['model','model'],['rest','rest']]){
+for(const [id,key] of [['metric','metric'],['win','win'],['split','split'],['stat','stat'],['model','model'],['rest','rest'],['early','early']]){
   $(id).value = S[key];
   $(id).onchange = e => { S[key] = e.target.value; store.set(key, S[key]); renderAll(); };
 }
@@ -2684,7 +2697,7 @@ setInterval(() => {
 let _pendingRender = false;
 window.JAM = {
   S, Sync, store, pickId,
-  _fn: { playerProject, leagueTeamAvg, aName, project, teamStats },   // para diagnóstico
+  _fn: { playerProject, leagueTeamAvg, aName, project, teamStats, modelOddsRows, h2hSignal },   // para diagnóstico
   rerender(){  // no re-dibujar mientras escribes; espera a que salgas de la casilla
     const ae = document.activeElement;
     if(ae && ae.tagName==='INPUT' && (ae.closest('#cards') || ae.closest('#plDetail'))){
