@@ -79,6 +79,8 @@ section{display:none} section.on{display:block}
 .tagrest.b2b{border-color:var(--under);color:var(--under)}
 .mkt{display:flex;flex-direction:column;gap:4px;font-size:13px;padding:0 14px 12px;color:var(--muted)}
 .mkt b{color:var(--ink)}
+.h2hnote{font-size:13px;color:var(--muted);margin:8px 0 6px;line-height:1.5}
+.h2hnote b{color:var(--ink)}
 .cmp{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:13px;padding:0 14px 10px}
 .cmp .k{font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
 .cmp b{color:var(--ink)}
@@ -344,7 +346,7 @@ tr.click{cursor:pointer}
     <p class="sub" id="enSub"></p>
     <div class="row">
       <div class="ctl"><label for="enGroup">Agrupar por</label><select id="enGroup"><option value="pair">Enfrentamiento</option><option value="team">Equipo</option></select></div>
-      <div class="ctl"><label for="enModel">Modelo a evaluar</label><select id="enModel"><option value="pace">Ritmo × eficiencia</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option></select></div>
+      <div class="ctl"><label for="enModel">Modelo a evaluar</label><select id="enModel"><option value="pace">Ritmo × eficiencia</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option><option value="h2h">Historial directo</option></select></div>
       <div class="ctl"><label for="enTeam">Equipo</label><select id="enTeam"></select></div>
       <div class="ctl"><label for="enMin">Mín. juegos</label><input type="number" id="enMin" min="1" value="1" style="width:70px"></div>
     </div>
@@ -371,11 +373,14 @@ tr.click{cursor:pointer}
       <div class="ctl"><label for="moMoment">Momento</label><select id="moMoment"><option value="pre">Antes del partido</option><option value="live">En vivo</option><option value="all">Todos</option></select></div>
       <div class="ctl"><label for="moValue">Picks</label><select id="moValue"><option value="all">Todos los del modelo</option><option value="value">Solo con valor según el momio</option><option value="strong">Solo con margen (≥1% de la línea)</option></select></div>
       <div class="ctl"><label for="moLine">Línea</label><select id="moLine"><option value="any">La mía; si no, mercado</option><option value="mine">Solo las que capturé</option><option value="market">Solo mercado (DraftKings)</option></select></div>
-      <div class="ctl"><label for="moModel">Modelo</label><select id="moModel"><option value="">Todos</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option><option value="pace">Ritmo × eficiencia</option></select></div>
+      <div class="ctl"><label for="moModel">Modelo</label><select id="moModel"><option value="">Todos</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option><option value="pace">Ritmo × eficiencia</option><option value="h2h">Historial directo</option></select></div>
     </div>
     <div class="tablewrap"><table id="moTable"></table></div>
     <div class="tablewrap" style="margin-top:10px"><table id="moDetail"></table></div>
     <p class="note" id="moFoot"></p>
+    <h2 style="margin-top:18px;font-size:19px">Sugerencia + historial directo</h2>
+    <p class="sub" id="hsSub"></p>
+    <div class="tablewrap"><table id="hsTable"></table></div>
     <h2 style="margin-top:18px;font-size:19px">Ritmo vs. Promedios</h2>
     <p class="sub">Los mismos partidos con cada modelo (resto de la configuración igual). "Cuando coinciden" = Ritmo y Promedios quedaron del mismo lado de la línea.</p>
     <div class="tablewrap"><table id="sgModels"></table></div>
@@ -723,12 +728,49 @@ function earlyAdj(H, A){
   return { per: d*w, w, d };   // por equipo
 }
 
+// ---------- modelo "Historial directo": promedio de los últimos enfrentamientos entre los dos equipos ----------
+const H2H_N = 4;
+function h2hStats(h, a, metric=S.metric, asOf=S.asOf, excludeId=null){
+  const f = METRICS[metric].f, G = [];
+  for(const x of S.games){ const X = norm(x.h.t), Y = norm(x.a.t);
+    if(!((X===h && Y===a) || (X===a && Y===h)) || x.id===excludeId || (asOf && x.date >= asOf)) continue;
+    const u = f(x.h), v = f(x.a); if(u==null || v==null) continue;
+    G.push({ date:x.date, tot:u+v, h: X===h ? u : v, a: X===h ? v : u }); }
+  if(!G.length) return null;
+  G.sort((x,y)=>y.date.localeCompare(x.date));
+  const R = G.slice(0, H2H_N);
+  return { n:R.length, tot: mean(R.map(r=>r.tot)), h: mean(R.map(r=>r.h)), a: mean(R.map(r=>r.a)), sd: sd(R.map(r=>r.tot)), last:R[0].date };
+}
+
+// Señal del historial: de los últimos enfrentamientos, cuántos quedaron arriba / abajo de la línea de hoy
+function h2hSignal(h, a, L, metric=S.metric, asOf=S.asOf, excludeId=null){
+  if(L==null) return null;
+  const f = METRICS[metric].f, G = [];
+  for(const x of S.games){ const X = norm(x.h.t), Y = norm(x.a.t);
+    if(!((X===h && Y===a) || (X===a && Y===h)) || x.id===excludeId || (asOf && x.date >= asOf)) continue;
+    const u = f(x.h), v = f(x.a); if(u==null || v==null) continue; G.push({ date:x.date, tot:u+v }); }
+  if(!G.length) return { n:0, o:0, u:0, side:null };
+  G.sort((x,y)=>y.date.localeCompare(x.date));
+  const R = G.slice(0, H2H_N), o = R.filter(r=>r.tot>L).length, u = R.filter(r=>r.tot<L).length;
+  return { n:R.length, o, u, side: o>u ? 'OVER' : u>o ? 'UNDER' : null };
+}
+
 function project(h, a, line, adj, g){
   const H = teamStats(h,'H'), A = teamStats(a,'A');
   if(!H.gp || !A.gp) return { H, A, proj:null };
   let base = (H.tot + A.tot)/2;                     // ATGA de la hoja JAM
   let hB = (H.f + A.c)/2, aB = (A.f + H.c)/2, pm = null;
   let plm = null;
+  if(S.model==='h2h'){
+    const X = h2hStats(h, a, S.metric, S.asOf, g?.id);
+    if(!X) return { H, A, proj:null, noH2H:true };
+    const sig = Math.sqrt(((H.sd||0)**2 + (A.sd||0)**2)/2) || null;
+    const out = { H, A, proj:X.tot, base:X.tot, hProj:X.h, aProj:X.a, h2h:X, sig };
+    if(line!=null && line!==''){ const L = Number(line); out.diff = X.tot - L; out.sug = X.tot > L ? 'OVER' : X.tot < L ? 'UNDER' : '—';
+      out.pOver = sig ? 1 - phi((L - X.tot)/sig) : null; const ov = arr => arr.length ? arr.filter(x=>x>L).length/arr.length : null;
+      out.hOver = ov(H.totals); out.aOver = ov(A.totals); out.hN = H.totals.length; out.aN = A.totals.length; }
+    return out;
+  }
   if(S.model==='pace'){ pm = paceProject(H, A); if(pm){ hB = pm.h; aB = pm.a; base = pm.h + pm.a; } }
   if((S.model==='players' || S.model==='mix') && g){
     const ph = playerProject(g, h, a, 'H', (H.f + A.c)/2), pa = playerProject(g, a, h, 'A', (A.f + H.c)/2);
@@ -1145,8 +1187,11 @@ function compareHTML(P, g, h, a, line){
     <span class="note">diferencia ${sgn(gap)}${Math.abs(gap)>=6?' · revisa Alineaciones':''}</span> ${verdict}</div>`;
 }
 function modelNote(P, g, db, h, a, m){
+  if(S.model==='h2h'){ S.model = 'pace'; store.set('model','pace'); $('model').value = 'pace'; }
+  if(P.noH2H) return `<div class="mkt"><span class="note">Modelo "Historial directo": estos equipos no se han enfrentado en las temporadas cargadas. Elige otro modelo para este partido.</span></div>`;
   if(P.proj==null) return '';
   const bits = [];
+  if(P.h2h) bits.push(`<span>Historial directo: promedio de los últimos <b>${P.h2h.n}</b> enfrentamientos (el más reciente ${P.h2h.last}). No usa ajustes de descanso ni de inicio de temporada.</span>`);
   if(P.plm){ const src = { prob:'titulares probables y lesionados', vivo:'alineación en vivo', real:'los que jugaron' }[P.plm.h.source];
     bits.push(`<span>${P.plm.mix?'Mitad promedios, mitad jugadores · ':''}Por jugadores: ${a} <b>${fmt(P.plm.a.f)}</b> (${P.plm.a.n} jug.) · ${h} <b>${fmt(P.plm.h.f)}</b> (${P.plm.h.n} jug.) <span class="note">· ${src}; detalle en Alineaciones</span></span>`); }
   else if(S.model==='players' || S.model==='mix') bits.push(`<span class="note">Modelo por jugadores: ${plFor(S.season) ? 'sin datos de jugadores para este cruce; se usa el de promedios.' : 'cargando jugadores…'}</span>`);
@@ -1322,7 +1367,7 @@ function evalCard(card, line){
 }
 function cardGame(card){ return S.live.find(x=>x.id===card.dataset.id) || null; }
 // Foto de lo que decía cada modelo en el momento de capturar la línea (para evaluarlos después en Seguimiento)
-const ALL_MODELS = ['avg','pace','players','mix'];
+const ALL_MODELS = ['avg','pace','players','mix','h2h'];
 function modelSnapshots(card, line){
   const out = {}, sv = S.model;
   try{
@@ -1623,10 +1668,27 @@ function renderSeguimiento(){
     ['Rango 80%', pct(cov, rowsT.length)],
   ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
   $('sgChart').innerHTML = sgChart(rowsT, tol);
+  // historial directo como señal: acierto de la sugerencia cuando el historial coincide / no coincide
+  {
+    const RS = rowsT.filter(r => r.line!=null && r.side!=null).map(r => ({ ...r, hs: h2hSignal(r.h, r.a, r.line, S.metric, r.date, r.id) }));
+    const sugSide = r => r.proj > r.line ? 'OVER' : 'UNDER', actSide = r => r.act > r.line ? 'OVER' : r.act < r.line ? 'UNDER' : null;
+    const rec = R => { const w = R.filter(r=>r.side).length; return R.length ? `<b>${Math.round(100*w/R.length)}%</b> <span class="note">(${w}-${R.length-w})</span>` : '—'; };
+    const withS = RS.filter(r => r.hs?.side), agree = withS.filter(r => r.hs.side===sugSide(r)), disagree = withS.filter(r => r.hs.side!==sugSide(r));
+    const none = RS.filter(r => !r.hs?.side);
+    const h2hAlone = withS.filter(r => actSide(r)), h2hW = h2hAlone.filter(r => r.hs.side===actSide(r)).length;
+    const strong = withS.filter(r => r.hs.side===sugSide(r) && Math.max(r.hs.o, r.hs.u) >= 3);
+    $('hsSub').innerHTML = `Para cada partido: los últimos ${H2H_N} enfrentamientos directos (antes de esa fecha) quedaron mayoría OVER o UNDER contra la línea, y ¿coincidió con la sugerencia de <b>${MODEL_LBL[S.model]}</b>?`;
+    $('hsTable').innerHTML = `<thead><tr><th>Caso</th><th class="n">Partidos</th><th class="n">Acierto de la sugerencia</th></tr></thead><tbody>
+      <tr><td>Historial <b>coincide</b> con la sugerencia</td><td class="n">${agree.length}</td><td class="n">${rec(agree)}</td></tr>
+      <tr><td>&nbsp;&nbsp;…y con 3+ de ${H2H_N} del mismo lado</td><td class="n">${strong.length}</td><td class="n">${rec(strong)}</td></tr>
+      <tr><td>Historial <b>contrario</b> a la sugerencia</td><td class="n">${disagree.length}</td><td class="n">${rec(disagree)}</td></tr>
+      <tr><td>Sin historial o empatado</td><td class="n">${none.length}</td><td class="n">${rec(none)}</td></tr>
+      <tr class="sumrow"><td>El historial solo (apostar a lo que dice la mayoría)</td><td class="n">${h2hAlone.length}</td><td class="n">${h2hAlone.length?`<b>${Math.round(100*h2hW/h2hAlone.length)}%</b> <span class="note">(${h2hW}-${h2hAlone.length-h2hW})</span>`:'—'}</td></tr></tbody>`;
+  }
   // comparación de modelos sobre los mismos partidos
   const filt = R => { let r = R; if(days && r.length){ const last = r.at(-1).date, from2 = addDays(last, -days+1); r = r.filter(x=>x.date>=from2); } return T ? r.filter(x=>x.h===T||x.a===T) : r; };
   const byModel = {};
-  for(const mo of ['avg','mix','players','pace']){ const sv = S.model; S.model = mo; try{ byModel[mo] = filt(trackRows()); } finally { S.model = sv; } }
+  for(const mo of ['avg','mix','players','pace','h2h']){ const sv = S.model; S.model = mo; try{ byModel[mo] = filt(trackRows()); } finally { S.model = sv; } }
   const ids = new Map(byModel.pace.map(r=>[r.id, r]));
   const both = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) === (ids.get(r.id).proj>r.line)));
   const split = byModel.avg.filter(r => r.side!=null && ids.get(r.id)?.side!=null && ((r.proj>r.line) !== (ids.get(r.id).proj>r.line)));
@@ -1634,7 +1696,7 @@ function renderSeguimiento(){
     return `<tr${MODEL_LBL[S.model]===lbl?' class="best"':''}><td>${lbl}</td><td class="n">${R.length}</td><td class="n">${R.length?fmt(mean(R.map(r=>Math.abs(r.err))),1):'—'}</td><td class="n">${R.length?sgn(mean(R.map(r=>r.err))):'—'}</td><td class="n">${sr.length?`${pct(w,sr.length)} <span class="note">(${w}-${sr.length-w})</span>`:'—'}</td></tr>`; };
   const bw = both.filter(r=>r.side).length, sw = split.filter(r=>r.side).length, smw = split.filter(r=>ids.get(r.id).side).length;
   $('sgModels').innerHTML = `<thead><tr><th>Modelo</th><th class="n">Partidos</th><th class="n">Error medio</th><th class="n">Sesgo</th><th class="n">Acierto del lado</th></tr></thead><tbody>
-    ${mrow('Promedios', byModel.avg)}${mrow('Mixto (promedios + jugadores)', byModel.mix)}${mrow('Jugadores', byModel.players)}${mrow('Ritmo × eficiencia', byModel.pace)}
+    ${mrow('Promedios', byModel.avg)}${mrow('Mixto (promedios + jugadores)', byModel.mix)}${mrow('Jugadores', byModel.players)}${mrow('Ritmo × eficiencia', byModel.pace)}${mrow('Historial directo', byModel.h2h)}
     <tr class="sumrow"><td>Cuando coinciden Ritmo y Promedios</td><td class="n">${both.length}</td><td></td><td></td><td class="n">${both.length?`${pct(bw,both.length)} <span class="note">(${bw}-${both.length-bw})</span>`:'—'}</td></tr>
     <tr><td>Cuando no coinciden: acierta Promedios / Ritmo</td><td class="n">${split.length}</td><td></td><td></td><td class="n">${split.length?`${pct(sw,split.length)} / ${pct(smw,split.length)}`:'—'}</td></tr></tbody>`;
 
@@ -1819,7 +1881,7 @@ $('sgTeams').addEventListener('click', e => {
 
 // ---------- prueba del modelo (backtest) ----------
 const WIN_LBL = { '0':'Toda la temporada', '20':'Últimos 20', '10':'Últimos 10', '5':'Últimos 5' };
-const MODEL_LBL = { avg:'Promedios', pace:'Ritmo × eficiencia', players:'Jugadores', mix:'Mixto (promedios + jugadores)' };
+const MODEL_LBL = { avg:'Promedios', pace:'Ritmo × eficiencia', players:'Jugadores', mix:'Mixto (promedios + jugadores)', h2h:'Historial directo' };
 const cfgLabel = c => `${MODEL_LBL[c.model]} · ${WIN_LBL[c.win]} · ${c.rest==='on'?'con descanso':'sin descanso'}`;
 let _btBusy = false;
 async function runBacktest(){
@@ -2172,8 +2234,14 @@ function h2hHTML(g, key, line, asOf){
   if(!games.length) return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (0)</summary><div class="note" style="margin-top:6px">Sin enfrentamientos en la base. Carga temporadas anteriores con el backfill (README).</div></details>`;
   const tots = games.map(x=>{ const u=m.f(x.h), v=m.f(x.a); return u==null||v==null?null:u+v; });
   const ok = tots.filter(v=>v!=null), L = line===''?null:Number(line);
-  const ov = L!=null ? ok.filter(v=>v>L).length : null;
-  return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (${games.length}) · prom. ${fmt(mean(ok))}${L!=null?` · over ${ov}/${ok.length}`:''}</summary>
+  const ov = L!=null ? ok.filter(v=>v>L).length : null, un = L!=null ? ok.filter(v=>v<L).length : null;
+  const sig = h2hSignal(h, a, L, S.metric, asOf, g.id);
+  const sv = S.asOf; S.asOf = asOf; let sug = null; try{ const Q = project(h, a, L, null, g); sug = Q.sug; } finally { S.asOf = sv; }
+  const note = `<div class="h2hnote">${L!=null ? `Contra la línea <b>${fmt(L)}</b>: <b style="color:var(--over)">${ov} OVER</b> · <b style="color:var(--under)">${un} UNDER</b>${ok.length-ov-un?` · ${ok.length-ov-un} push`:''} de ${ok.length}
+      · promedio <b>${fmt(mean(ok))}</b> (${sgn(mean(ok)-L)} vs. la línea)` : `Promedio <b>${fmt(mean(ok))}</b> en ${ok.length} partidos · pon la línea para ver cuántos fueron OVER y UNDER`}
+      ${sig && sig.n ? `<br>Señal de los últimos ${sig.n}: <b>${sig.side || 'empate'}</b> (${sig.o} O · ${sig.u} U)${sug && sig.side ? ` · sugerencia de ${MODEL_LBL[S.model]}: <b>${sug}</b> → ${sig.side===sug ? '<span class="pill over" style="font-size:12px">✓ coinciden</span>' : '<span class="pill warn" style="font-size:12px">⚠ contraria</span>'}` : ''}` : ''}</div>`;
+  return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (${games.length}) · prom. ${fmt(mean(ok))}${L!=null?` · ${ov} O / ${un} U`:''}</summary>
+    ${note}
     <table><thead><tr><th>Fecha</th><th>Temp.</th><th>Partido</th><th class="n">Marcador</th><th class="n">${m.label}</th></tr></thead><tbody>
     ${games.map((x,i)=>{ const t=tots[i]; const cls = L==null||t==null?'':t>L?'o':t<L?'u':'';
       return `<tr><td>${x.date}</td><td>${x.season-1}-${String(x.season).slice(2)}</td><td>${norm(x.a.t)} @ ${norm(x.h.t)}</td><td class="n">${x.a.pts}-${x.h.pts}</td><td class="n ${cls}">${t??'—'} <span class="note">(${m.f(x.a)??'-'}+${m.f(x.h)??'-'})</span></td></tr>`; }).join('')}
