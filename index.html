@@ -236,6 +236,7 @@ tr.click{cursor:pointer}
       <button data-t="ranking">Ranking</button>
       <button data-t="picks">Mis picks</button>
       <button data-t="competencia">Competencia</button>
+      <button data-t="enfrentamientos">Enfrentamientos</button>
       <button data-t="seguimiento">Seguimiento</button>
       <button data-t="modelo">Prueba del modelo</button>
       <button data-t="datos">Datos / Excel</button>
@@ -336,6 +337,22 @@ tr.click{cursor:pointer}
     <div class="tablewrap"><table id="lgTable"></table></div>
     <h2 style="margin-top:18px;font-size:19px" id="lgFeedH">Picks revelados</h2>
     <div class="tablewrap"><table id="lgFeed"></table></div>
+  </section>
+
+  <section id="s-enfrentamientos">
+    <h2>Enfrentamientos de la temporada</h2>
+    <p class="sub" id="enSub"></p>
+    <div class="row">
+      <div class="ctl"><label for="enGroup">Agrupar por</label><select id="enGroup"><option value="pair">Enfrentamiento</option><option value="team">Equipo</option></select></div>
+      <div class="ctl"><label for="enModel">Modelo a evaluar</label><select id="enModel"><option value="pace">Ritmo × eficiencia</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option></select></div>
+      <div class="ctl"><label for="enTeam">Equipo</label><select id="enTeam"></select></div>
+      <div class="ctl"><label for="enMin">Mín. juegos</label><input type="number" id="enMin" min="1" value="1" style="width:70px"></div>
+    </div>
+    <div class="kpis" id="enKpis"></div>
+    <div class="tablewrap"><table id="enTable"></table></div>
+    <h2 style="margin-top:18px;font-size:19px" id="enDetH"></h2>
+    <div class="tablewrap"><table id="enDetail"></table></div>
+    <p class="note" id="enFoot"></p>
   </section>
 
   <section id="s-seguimiento">
@@ -1482,7 +1499,7 @@ let _sgCache = null; const _sgMap = new Map();
 S.sgSort = store.get('sgSort', ['tmae', 1]);
 function trackRows(){
   const f = METRICS[S.metric].f;
-  const key = [S.season, S.metric, S.model, S.win, S.rest, S.split, S.stat, S.games.length, JSON.stringify(S.lines).length].join('|');
+  const key = [S.season, S.metric, S.model, S.win, S.rest, S.split, S.stat, S.games.length, JSON.stringify(S.lines).length, JSON.stringify(S.hist).length, !!plFor(S.season)].join('|');
   if(_sgMap.has(key)) return _sgMap.get(key);
   const logs = teamLogs(), rows = [];
   const games = seasonGames().filter(g => f(g.h)!=null && f(g.a)!=null).sort((x,y)=>x.date.localeCompare(y.date));
@@ -1490,11 +1507,13 @@ function trackRows(){
   try{
     for(const g of games){
       const h = norm(g.h.t), a = norm(g.a.t);
-      if((logs[h]||[]).filter(x=>x.date<g.date).length < 5 || (logs[a]||[]).filter(x=>x.date<g.date).length < 5) continue;
+      // necesita 5 juegos previos de cada equipo (contando los de la temporada anterior que se usan al inicio)
       S.asOf = g.date;
+      if(logsAsOf(h).length < 5 || logsAsOf(a).length < 5) continue;
       const P = project(h, a, null, null, g); if(P.proj==null) continue;
       const act = f(g.h) + f(g.a);
-      const mine = S.lines[lineKey(g.id)];
+      const k = lineKey(g.id), preH = (S.hist[k] || []).filter(x => x.label==='Pre' && x.line!=null).at(-1);
+      const mine = preH ? preH.line : S.lines[k];                       // tu última línea antes del partido
       const line = mine!=null ? Number(mine) : (S.metric==='pts' && g.mk?.ou!=null ? g.mk.ou : null);
       let side = null;
       if(line!=null && act!==line && P.proj!==line) side = (P.proj>line) === (act>line);
@@ -1506,6 +1525,71 @@ function trackRows(){
   _sgMap.set(key, rows);
   return rows;
 }
+// ---------- enfrentamientos de la temporada ----------
+S.enSort = store.get('enSort', ['n', -1]);
+function renderEnfrentamientos(){
+  const m = METRICS[S.metric], mo = $('enModel').value;
+  if((mo==='players' || mo==='mix') && !plFor(S.season)){ $('enTable').innerHTML = '<tr><td class="empty">Cargando jugadores…</td></tr>'; ensurePlayers(S.season).then(()=>{ _sgMap.clear(); if(tab==='enfrentamientos') renderEnfrentamientos(); }); return; }
+  const ts = $('enTeam'); if(!ts.options.length) ts.innerHTML = '<option value="">Todos</option>' + Object.keys(TEAMS).sort((x,y)=>tname(x).localeCompare(tname(y))).map(t=>`<option value="${t}">${tname(t)}</option>`).join('');
+  $('enSub').innerHTML = `Temporada <b>${S.season?`${S.season-1}-${String(S.season).slice(2)}`:'—'}</b> · parámetro <b>${m.label}</b>. Línea = la última que capturaste antes del partido; si no hay y es Puntos, la de DraftKings. "Acierto" = qué tan seguido el modelo <b>${MODEL_LBL[mo]}</b> recomendó el lado correcto (con lo que sabía antes de cada juego).`;
+  const sv = S.model; S.model = mo; let rows; try{ rows = trackRows(); } finally { S.model = sv; }
+  const T = ts.value, group = $('enGroup').value, minN = Number($('enMin').value)||1;
+  if(T) rows = rows.filter(r => r.h===T || r.a===T);
+  if(!rows.length){ $('enKpis').innerHTML=''; $('enTable').innerHTML = '<tr><td class="empty">Todavía no hay partidos terminados en esta temporada.</td></tr>'; $('enDetail').innerHTML=''; $('enDetH').textContent=''; $('enFoot').textContent=''; return; }
+  // agrupar
+  const G = new Map();
+  for(const r of rows){
+    const keys = group==='pair' ? [[r.h, r.a].sort().join('-')] : (T ? [T] : [r.h, r.a]);
+    for(const k of keys){ (G.get(k) || G.set(k, []).get(k)).push(r); }
+  }
+  const out = [...G.entries()].map(([k, R]) => {
+    const L = R.filter(r=>r.line!=null), over = L.filter(r=>r.act>r.line).length, under = L.filter(r=>r.act<r.line).length;
+    const sd = R.filter(r=>r.side!=null), w = sd.filter(r=>r.side).length;
+    return { k, R, n:R.length, line: L.length ? mean(L.map(r=>r.line)) : null, act: mean(R.map(r=>r.act)), proj: mean(R.map(r=>r.proj)),
+      diff: L.length ? mean(L.map(r=>r.act - r.line)) : null, over, under, nl:L.length, pOver: L.length ? over/L.length : null,
+      acc: sd.length ? w/sd.length : null, w, l: sd.length - w, err: mean(R.map(r=>Math.abs(r.err))), last: R.map(r=>r.date).sort().at(-1) };
+  }).filter(x => x.n >= minN);
+  const [sk, dir] = S.enSort;
+  out.sort((x,y) => sk==='k' ? dir*x.k.localeCompare(y.k) : (dir*(((x[sk]??-1e9) - (y[sk]??-1e9))) || (y.n - x.n) || y.last.localeCompare(x.last)));
+  const name = k => group==='pair' ? k.split('-').map(t=>badge(t)).join(' vs ') : `${badge(k)} ${tname(k)}`;
+  const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
+  const cols = [['k', group==='pair'?'Enfrentamiento':'Equipo'],['n','Juegos'],['line','Línea prom.'],['act','Real prom.'],['diff','Real − línea'],['pOver','Over / Under'],['proj','Proy. prom.'],['err','Error prom.'],['acc','Acierto modelo']];
+  $('enTable').innerHTML = `<thead><tr>${cols.map(([k,l])=>`<th data-k="${k}" class="${k==='k'?'':'n'} ${k===sk?'sorted'+(dir>0?' asc':''):''}">${l}</th>`).join('')}</tr></thead><tbody>${
+    out.map(x=>`<tr class="click ${S.enSel===x.k?'best':''}" data-k="${x.k}"><td style="white-space:nowrap">${name(x.k)}</td><td class="n">${x.n}</td>
+      <td class="n">${fmt(x.line)}</td><td class="n"><b>${fmt(x.act)}</b></td><td class="n" style="${col(x.diff)}">${x.diff==null?'—':sgn(x.diff)}</td>
+      <td class="n">${x.nl?`<span style="color:var(--over)">${x.over} O</span> · <span style="color:var(--under)">${x.under} U</span> <span class="note">(${Math.round(100*x.pOver)}% O)</span>`:'—'}</td>
+      <td class="n">${fmt(x.proj)}</td><td class="n">${fmt(x.err)}</td>
+      <td class="n">${x.acc==null?'—':`<b>${Math.round(100*x.acc)}%</b> <span class="note">(${x.w}-${x.l})</span>`}</td></tr>`).join('')}</tbody>`;
+  // resumen
+  const all = rows.filter(r=>r.line!=null), sd = rows.filter(r=>r.side!=null), w = sd.filter(r=>r.side).length;
+  $('enKpis').innerHTML = [
+    ['Partidos', rows.length],
+    ['Línea promedio', fmt(mean(all.map(r=>r.line)))],
+    ['Real promedio', fmt(mean(rows.map(r=>r.act)))],
+    ['Over / Under', `${all.filter(r=>r.act>r.line).length}-${all.filter(r=>r.act<r.line).length}`],
+    [`Acierto ${MODEL_LBL[mo].split(' ')[0]}`, sd.length ? `${Math.round(100*w/sd.length)}% <span class="note" style="font-size:12px">(${w}-${sd.length-w})</span>` : '—'],
+  ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
+  // detalle
+  const sel = out.find(x=>x.k===S.enSel);
+  $('enDetH').innerHTML = sel ? `Partidos: ${name(sel.k)}` : '';
+  $('enDetail').innerHTML = sel ? `<thead><tr><th>Fecha</th><th>Partido</th><th class="n">Línea</th><th class="n">Real</th><th class="n">Marcador</th><th class="n">Proy.</th><th>Lado modelo</th><th>Resultado</th></tr></thead><tbody>${
+    [...sel.R].sort((x,y)=>y.date.localeCompare(x.date)).map(r=>`<tr><td>${r.date}</td><td style="white-space:nowrap">${badge(r.a)} @ ${badge(r.h)}</td>
+      <td class="n">${r.line!=null?`${fmt(r.line)} <span class="note">${r.lineSrc}</span>`:'—'}</td><td class="n"><b>${r.act}</b> ${r.line!=null?`<span class="note">${r.act>r.line?'O':r.act<r.line?'U':'='}</span>`:''}</td>
+      <td class="n note">${r.aA}-${r.hA}</td><td class="n">${fmt(r.proj)}</td>
+      <td>${r.line!=null && r.proj!==r.line ? `<span class="pill ${r.proj>r.line?'over':'under'}">${r.proj>r.line?'OVER':'UNDER'}</span>` : ''}</td>
+      <td>${r.side==null?'<span class="note">—</span>':r.side?'<span class="res-W">✓ Acertó</span>':'<span class="res-L">✗ Falló</span>'}</td></tr>`).join('')}</tbody>` : '';
+  $('enFoot').innerHTML = `Toca un renglón para ver sus partidos. <b>Real − línea</b>: positivo = esos partidos suelen terminar arriba de la línea (tendencia OVER), negativo = abajo. <b>Error prom.</b>: cuánto se alejó la proyección del resultado real.
+    Al inicio de temporada casi todos los cruces llevan 1 partido; agrupa por <b>Equipo</b> para ver más datos.`;
+}
+for(const id of ['enGroup','enModel','enTeam']) $(id).onchange = () => { S.enSel = null; renderEnfrentamientos(); };
+$('enMin').onchange = () => renderEnfrentamientos();
+$('enTable').addEventListener('click', e => {
+  const k = e.target.closest('th')?.dataset.k;
+  if(k){ S.enSort = S.enSort[0]===k ? [k, -S.enSort[1]] : [k, k==='k'?1:-1]; store.set('enSort', S.enSort); renderEnfrentamientos(); return; }
+  const tr = e.target.closest('tr[data-k]'); if(!tr) return;
+  S.enSel = S.enSel===tr.dataset.k ? null : tr.dataset.k; renderEnfrentamientos();
+});
+
 function renderSeguimiento(){
   const m = METRICS[S.metric];
   if(!plFor(S.season)){ $('sgKpis').innerHTML = '<p class="note">Cargando jugadores…</p>'; ensurePlayers(S.season).then(()=>{ _sgMap.clear(); if(tab==='seguimiento') renderSeguimiento(); }); return; }
@@ -1521,7 +1605,7 @@ function renderSeguimiento(){
   const rowsT = T ? rows.filter(r=>r.h===T || r.a===T) : rows;
   renderModelOdds();
   if(!rowsT.length){
-    $('sgKpis').innerHTML = ''; $('sgChart').innerHTML = ''; $('sgTeams').innerHTML = ''; $('sgGames').innerHTML = '<tr><td class="empty">Todavía no hay partidos para evaluar (cada equipo necesita 5 juegos previos). Para ver cómo funciona, elige la temporada pasada arriba.</td></tr>'; $('sgFoot').textContent='';
+    $('sgKpis').innerHTML = ''; $('sgChart').innerHTML = ''; $('sgTeams').innerHTML = ''; $('sgGames').innerHTML = '<tr><td class="empty">Todavía no hay partidos terminados para evaluar en esta temporada.</td></tr>'; $('sgFoot').textContent='';
     return;
   }
   const avgAct = mean(rowsT.map(r=>r.act)), tol = Math.max(1, Math.round(avgAct*0.05));
@@ -2342,6 +2426,7 @@ function renderAll(){
   else if(tab==='ranking') renderRanking();
   else if(tab==='modelo') renderModelo();
   else if(tab==='seguimiento') renderSeguimiento();
+  else if(tab==='enfrentamientos') renderEnfrentamientos();
   else if(tab==='competencia'){ renderCompetencia(); if(Sync.on && (!S.league || Date.now()-S.league.loaded > 120e3)) Sync.loadLeague(); }
   else renderDatos();
 }
