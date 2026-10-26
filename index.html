@@ -79,6 +79,9 @@ section{display:none} section.on{display:block}
 .tagrest.b2b{border-color:var(--under);color:var(--under)}
 .mkt{display:flex;flex-direction:column;gap:4px;font-size:13px;padding:0 14px 12px;color:var(--muted)}
 .mkt b{color:var(--ink)}
+.stake{display:block;width:100%;margin-top:4px;font-size:13.5px}
+.stake b{color:var(--ink)}
+.stake.none{color:var(--muted)}
 .h2hnote{font-size:13px;color:var(--muted);margin:8px 0 6px;line-height:1.5}
 .h2hnote b{color:var(--ink)}
 .neon{display:inline-block;font:800 12.5px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;padding:1px 8px;border-radius:5px;color:#111}
@@ -382,6 +385,24 @@ tr.click{cursor:pointer}
     <div class="tablewrap"><table id="moTable"></table></div>
     <div class="tablewrap" style="margin-top:10px"><table id="moDetail"></table></div>
     <p class="note" id="moFoot"></p>
+    <h2 style="margin-top:18px;font-size:19px">Acierto según la ventaja y % del bank</h2>
+    <p class="sub" id="edSub"></p>
+    <div class="row">
+      <div class="ctl"><label for="edModel">Modelo</label><select id="edModel"><option value="">El que tienes arriba</option><option value="pace">Ritmo × eficiencia</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option></select></div>
+      <div class="ctl"><label for="bank">Bank ($)</label><input type="number" id="bank" min="0" step="100" style="width:110px"></div>
+      <div class="ctl"><label for="kfrac">Qué tan agresivo</label><select id="kfrac"><option value="0.25">Prudente (¼ Kelly)</option><option value="0.5">Medio (½ Kelly)</option><option value="0.125">Muy prudente (⅛ Kelly)</option></select></div>
+    </div>
+    <div class="tablewrap"><table id="edTable"></table></div>
+    <div class="tablewrap" style="margin-top:10px"><table id="edCum"></table></div>
+    <p class="note" id="edFoot"></p>
+    <h2 style="margin-top:18px;font-size:19px">Combinaciones de modelos</h2>
+    <p class="sub">Cuando varias señales recomiendan el mismo lado contra la línea, ¿se acierta más? Señales: Ritmo, Promedios, Mixto, Jugadores e Historial directo (mayoría de enfrentamientos previos). Usa los mismos partidos, líneas y momios de la tabla de arriba (antes del partido).</p>
+    <div class="row"><div class="ctl"><label for="cbMin">Mín. partidos</label><input type="number" id="cbMin" min="1" value="3" style="width:70px"></div>
+      <div class="ctl"><label for="cbSize">Mostrar</label><select id="cbSize"><option value="12">Señales solas y pares</option><option value="123">Hasta tríos</option><option value="all">Todas las combinaciones</option></select></div></div>
+    <div class="tablewrap"><table id="cbTable"></table></div>
+    <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Qué tanto coinciden entre sí</h3>
+    <div class="tablewrap"><table id="cbMatrix"></table></div>
+    <p class="note" id="cbFoot"></p>
     <h2 style="margin-top:18px;font-size:19px">Sugerencia + historial directo</h2>
     <p class="sub" id="hsSub"></p>
     <div class="tablewrap"><table id="hsTable"></table></div>
@@ -1159,7 +1180,18 @@ function valueHTML(E, key){
     ${best && best[1].ev>0 ? `<span class="pill ${best[0]==='OVER'?'over':'under'}">VALOR ${best[0]} +${(best[1].ev*100).toFixed(1)}%</span>` : '<span class="pill">SIN VALOR</span>'}
     ${part('Over', vO, E.pOver)} ${part('Under', vU, 1-E.pOver)}
     ${vig!=null?`<span class="note">comisión de la casa ${(vig*100).toFixed(1)}%</span>`:''}
+    ${stakeNote(E, od)}
   </div>`;
+}
+function stakeNote(E, od){
+  if(E.el!=null || E.proj==null || E.diff==null) return '';            // solo antes del partido
+  const side = E.sug, dec = oddsDec(side==='OVER' ? od.o : od.u); if(!dec) return '';
+  let st; try{ st = stakeFor(Math.abs(E.diff), dec); } catch { return ''; }
+  if(!st) return '';
+  const bank = Number(store.get('bank', 0)) || 0;
+  return st.pct > 0
+    ? `<span class="stake">Apostar <b>${(100*st.pct).toFixed(1)}%</b> del bank${bank?` = <b>${money(Math.round(bank*st.pct))}</b>`:''} <span class="note">(ventaja ${edgeLbl(st.b)}: ${st.n} partidos, ${st.acc!=null?Math.round(100*st.acc)+'%':'—'} acierto)</span></span>`
+    : `<span class="stake none">No apostar <span class="note">(con ventaja de ${edgeLbl(st.b)} pts el acierto no alcanza: ${st.n} partidos, ${st.acc!=null?Math.round(100*st.acc)+'%':'—'})</span></span>`;
 }
 
 // ---------- render: partidos ----------
@@ -1653,6 +1685,8 @@ function renderSeguimiento(){
   const T = $('sgTeam').value;
   const rowsT = T ? rows.filter(r=>r.h===T || r.a===T) : rows;
   renderModelOdds();
+  renderEdges();
+  renderCombos();
   if(!rowsT.length){
     $('sgKpis').innerHTML = ''; $('sgChart').innerHTML = ''; $('sgTeams').innerHTML = ''; $('sgGames').innerHTML = '<tr><td class="empty">Todavía no hay partidos terminados para evaluar en esta temporada.</td></tr>'; $('sgFoot').textContent='';
     return;
@@ -1816,6 +1850,117 @@ function allModelsTable(rows){
     <tr class="sumrow"><td colspan="5">% de acierto (récord)</td>${ALL_MODELS.map(tot).join('')}</tr>
     <tr class="sumrow2"><td colspan="5">Error medio de la proyección vs. el real</td>${ALL_MODELS.map(err).join('')}</tr></tbody>`;
 }
+// ---------- acierto según la ventaja y tamaño de apuesta (Kelly) ----------
+const EDGE_B = [[0,1],[1,2],[2,3],[3,4],[4,6],[6,8],[8,99]];
+const edgeLbl = ([a,b]) => b>=99 ? `${a}+` : `${a}–${b}`;
+// probabilidad de acierto estimada con lo observado, jalada hacia 50% cuando hay pocos partidos
+const shrunkP = (w, l, k=30) => (w + 0.5*k) / (w + l + k);
+const kellyPct = (p, dec, frac) => { if(!dec || dec<=1) return 0; const f = (p*dec - 1)/(dec - 1); return Math.max(0, Math.min(0.03, f*frac)); };
+const _edCache = new Map();
+function edgeStats(model){
+  const mo = model || S.model;
+  // las líneas que capturas hoy no cambian los partidos ya terminados: se recalcula cuando hay partidos nuevos o cada 10 min
+  const ck = [mo, S.season, S.metric, S.games.length, !!plFor(S.season), $('moLine').value, Math.floor(Date.now()/600e3)].join('|');
+  if(_edCache.has(ck)) return _edCache.get(ck);
+  const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value };
+  $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = '';
+  let rows; try{ rows = modelOddsRows().filter(r => r.mo===mo); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; $('sgRange').value = sv.r; $('sgTeam').value = sv.t; }
+  const pct = L => Math.max(0.5, 0.01*L);
+  const B = EDGE_B.map(b => ({ b, rows: rows.filter(r => { const e = Math.abs(r.p - r.line); return e >= b[0] && e < b[1]; }) }));
+  for(const x of B){ const R = x.rows; x.w = R.filter(r=>r.res==='W').length; x.l = R.filter(r=>r.res==='L').length; x.p = R.filter(r=>r.res==='P').length;
+    x.u = R.reduce((t,r)=>t+r.units,0); x.dec = R.length ? mean(R.map(r=>r.dec)) : 1.909; x.ps = shrunkP(x.w, x.l); }
+  const out = { mo, rows, B };
+  if(_edCache.size > 20) _edCache.clear();
+  _edCache.set(ck, out); return out;
+}
+// para la tarjeta: % del bank sugerido según el tamaño de la ventaja de este partido
+function stakeFor(edge, dec){
+  const st = edgeStats(); const x = st.B.find(b => edge >= b.b[0] && edge < b.b[1]); if(!x) return null;
+  const frac = Number(store.get('kfrac', '0.25')); const pct = kellyPct(x.ps, dec || x.dec, frac);
+  return { pct, n: x.w + x.l, acc: x.w + x.l ? x.w/(x.w+x.l) : null, ps: x.ps, b: x.b };
+}
+function renderEdges(){
+  const mo = $('edModel').value || S.model, st = edgeStats(mo);
+  const bank = Number(store.get('bank', 0)) || 0, frac = Number(store.get('kfrac','0.25'));
+  $('bank').value = bank || ''; $('kfrac').value = String(frac);
+  $('edSub').innerHTML = `Partidos de la temporada con línea (antes del partido), agrupados por cuántos puntos se separó <b>${MODEL_LBL[mo]}</b> de la línea. Con el acierto de cada grupo y el momio se calcula qué % de tu bank conviene apostar.`;
+  if(!st.rows.length){ $('edTable').innerHTML = '<tr><td class="empty">Todavía no hay partidos con línea.</td></tr>'; $('edCum').innerHTML=''; $('edFoot').textContent=''; return; }
+  const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
+  const money2 = v => bank ? money(Math.round(bank*v)) : '—';
+  $('edTable').innerHTML = `<thead><tr><th>Ventaja (puntos)</th><th class="n">Partidos</th><th class="n">Récord</th><th class="n">% acierto</th><th class="n">Unidades</th><th class="n">ROI</th><th class="n">Prob. estimada</th><th class="n">% del bank</th><th class="n">Monto</th></tr></thead><tbody>${
+    st.B.map(x => { const n = x.w+x.l+x.p, k = kellyPct(x.ps, x.dec, frac);
+      return `<tr><td>${edgeLbl(x.b)}</td><td class="n">${n}</td><td class="n">${n?`${x.w}-${x.l}${x.p?'-'+x.p:''}`:'—'}</td><td class="n"><b>${x.w+x.l?(100*x.w/(x.w+x.l)).toFixed(1)+'%':'—'}</b></td>
+        <td class="n" style="${col(x.u)}">${n?sgn(x.u,2):'—'}</td><td class="n">${n?(100*x.u/n).toFixed(1)+'%':'—'}</td><td class="n">${n?(100*x.ps).toFixed(1)+'%':'—'}</td>
+        <td class="n"><b>${k>0?(100*k).toFixed(1)+'%':'<span class="note">no apostar</span>'}</b></td><td class="n">${k>0?money2(k):'—'}</td></tr>`; }).join('')}</tbody>`;
+  // acumulado: ventaja ≥ X
+  const cum = [0,1,2,3,4,6].map(t => { const R = st.rows.filter(r => Math.abs(r.p - r.line) >= t), w = R.filter(r=>r.res==='W').length, l = R.filter(r=>r.res==='L').length;
+    return { t, n:R.length, w, l, u:R.reduce((s,r)=>s+r.units,0) }; });
+  const ok = cum.find(c => c.n >= 10 && c.w+c.l && c.w/(c.w+c.l) > 0.524);
+  $('edCum').innerHTML = `<thead><tr><th>Si solo apuestas con ventaja de…</th><th class="n">Partidos</th><th class="n">Récord</th><th class="n">% acierto</th><th class="n">Unidades</th><th class="n">ROI</th></tr></thead><tbody>${
+    cum.map(c=>`<tr class="${c===ok?'best':''}"><td>${c.t} puntos o más</td><td class="n">${c.n}</td><td class="n">${c.w}-${c.l}</td><td class="n"><b>${c.w+c.l?(100*c.w/(c.w+c.l)).toFixed(1)+'%':'—'}</b></td><td class="n" style="${col(c.u)}">${c.n?sgn(c.u,2):'—'}</td><td class="n">${c.n?(100*c.u/c.n).toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody>`;
+  $('edFoot').innerHTML = `<b>Prob. estimada</b>: el acierto del grupo jalado hacia 50% cuando hay pocos partidos (como si cada grupo empezara con 15 ganados y 15 perdidos), para no apostar fuerte por una racha corta.
+    <b>% del bank</b>: criterio de Kelly × ${frac===0.25?'¼':frac===0.5?'½':'⅛'} con el momio promedio del grupo, máximo 3%. Con momio −110 necesitas más de 52.4% para que convenga apostar; si no, dice "no apostar".
+    ${ok ? `Por ahora, apostar solo con <b>${ok.t}+ puntos</b> de ventaja es el primer corte que supera 52.4% con al menos 10 partidos.` : 'Todavía no hay un corte con 10+ partidos que supere 52.4%.'}
+    El monto sugerido también aparece en cada tarjeta de partido cuando pones la línea y el momio.`;
+}
+$('bank').onchange = e => { store.set('bank', Number(e.target.value)||0); renderEdges(); };
+$('kfrac').onchange = e => { store.set('kfrac', e.target.value); renderEdges(); };
+$('edModel').onchange = renderEdges;
+
+// ---------- combinaciones de modelos ----------
+const SIG_LBL = { pace:'Ritmo', avg:'Promedios', mix:'Mixto', players:'Jugadores', hist:'Historial' };
+function renderCombos(){
+  // partidos antes del inicio, todas las recomendaciones (sin filtro de valor) para comparar sobre la misma base
+  const sv = { mm:$('moMoment').value, mv:$('moValue').value };
+  $('moMoment').value = 'pre'; $('moValue').value = 'all';
+  let rows; try{ rows = modelOddsRows(); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; }
+  const G = new Map();
+  for(const r of rows){
+    if(r.mo==='h2h') continue;
+    const g = G.get(r.id) || { id:r.id, date:r.date, h:r.h, a:r.a, line:r.line, act:r.act, sides:{}, dec:{} };
+    g.sides[r.mo] = r.side; g.dec[r.mo] = r.dec; G.set(r.id, g);
+  }
+  for(const g of G.values()){
+    const hs = h2hSignal(g.h, g.a, g.line, S.metric, g.date, g.id);
+    if(hs?.side) g.sides.hist = hs.side;
+    g.res = g.act > g.line ? 'OVER' : g.act < g.line ? 'UNDER' : 'P';
+  }
+  const games = [...G.values()];
+  const keys = ['pace','avg','mix','players','hist'];
+  const minN = Number($('cbMin').value)||1, size = $('cbSize').value;
+  const combos = [];
+  for(let mask=1; mask < (1<<keys.length); mask++){
+    const ks = keys.filter((_,i) => mask & (1<<i));
+    if(size==='12' && ks.length > 2) continue;
+    if(size==='123' && ks.length > 3) continue;
+    let w=0, l=0, p=0, u=0, n=0;
+    for(const g of games){
+      const ss = ks.map(k => g.sides[k]); if(ss.some(x=>!x) || new Set(ss).size !== 1) continue;
+      const side = ss[0]; n++;
+      if(g.res==='P'){ p++; continue; }
+      const dec = g.dec[ks.find(k=>k!=='hist')] || 1.909;
+      if(side===g.res){ w++; u += dec - 1; } else { l++; u -= 1; }
+    }
+    combos.push({ ks, n, w, l, p, u, acc: w+l ? w/(w+l) : null });
+  }
+  const base = combos.filter(c => c.n >= minN && c.acc!=null).sort((x,y)=> (y.acc - x.acc) || (y.n - x.n));
+  const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
+  const best = base[0];
+  $('cbTable').innerHTML = base.length ? `<thead><tr><th>Combinación (todas dicen lo mismo)</th><th class="n">Señales</th><th class="n">Partidos</th><th class="n">Récord</th><th class="n">% acierto</th><th class="n">Unidades</th><th class="n">ROI</th></tr></thead><tbody>${
+    base.map(c=>`<tr class="${c===best?'best':''}"><td>${c.ks.map(k=>SIG_LBL[k]).join(' + ')}</td><td class="n">${c.ks.length}</td><td class="n">${c.n}</td><td class="n">${c.w}-${c.l}${c.p?'-'+c.p:''}</td>
+      <td class="n"><b>${(100*c.acc).toFixed(1)}%</b></td><td class="n" style="${col(c.u)}">${sgn(c.u,2)}</td><td class="n">${c.w+c.l?(100*c.u/(c.w+c.l+c.p)).toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody>`
+    : `<tr><td class="empty">Todavía no hay suficientes partidos con línea (mínimo ${minN} por combinación).</td></tr>`;
+  // matriz de coincidencia
+  const pair = (a,b) => { let n=0, same=0; for(const g of games){ if(!g.sides[a] || !g.sides[b]) continue; n++; if(g.sides[a]===g.sides[b]) same++; } return n ? same/n : null; };
+  $('cbMatrix').innerHTML = `<thead><tr><th></th>${keys.map(k=>`<th class="n">${SIG_LBL[k]}</th>`).join('')}</tr></thead><tbody>${
+    keys.map(a=>`<tr><td><b>${SIG_LBL[a]}</b></td>${keys.map(b=>{ if(a===b) return '<td class="n note">—</td>'; const v = pair(a,b);
+      return `<td class="n" style="background:${v==null?'transparent':`rgba(${v>0.8?'234,179,8':'34,197,94'},${(0.08+0.25*Math.abs(v-0.5)*2).toFixed(2)})`}">${v==null?'—':Math.round(100*v)+'%'}</td>`; }).join('')}</tr>`).join('')}</tbody>`;
+  $('cbFoot').innerHTML = `${games.length} partidos con línea. <b>Combinación</b>: solo cuenta los partidos donde todas esas señales recomiendan el mismo lado; el acierto es de ese lado. Unidades con el momio capturado o el de DraftKings (−110 si no hay).
+    <b>Qué tanto coinciden</b>: % de partidos en que dos señales recomiendan lo mismo; arriba de 80% (amarillo) casi siempre dicen igual y combinarlas no agrega información. Las combinaciones útiles son las de señales que <i>no</i> siempre coinciden y aun así, cuando lo hacen, aciertan más.
+    Con pocos partidos los porcentajes cambian mucho: fíjate en las que tengan 20+ partidos.`;
+}
+for(const id of ['cbMin','cbSize']) $(id).onchange = renderCombos;
+
 function renderModelOdds(){
   const rows = modelOddsRows(), selM = $('moModel').value;
   const pct = (a,b) => b ? (100*a/b).toFixed(1)+'%' : '—';
