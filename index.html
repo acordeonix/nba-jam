@@ -84,6 +84,7 @@ section{display:none} section.on{display:block}
 .neon{display:inline-block;font:800 12.5px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;padding:1px 8px;border-radius:5px;color:#111}
 .neon.o{background:#39ff14;box-shadow:0 0 8px rgba(57,255,20,.75)}
 .neon.u{background:#ff2fd6;box-shadow:0 0 8px rgba(255,47,214,.75)}
+.neon.e{background:#fff35c;box-shadow:0 0 8px rgba(255,243,92,.6)}
 .cmp{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:13px;padding:0 14px 10px}
 .cmp .k{font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
 .cmp b{color:var(--ink)}
@@ -754,7 +755,7 @@ function h2hSignal(h, a, L, metric=S.metric, asOf=S.asOf, excludeId=null){
     const u = f(x.h), v = f(x.a); if(u==null || v==null) continue; G.push({ date:x.date, tot:u+v }); }
   if(!G.length) return { n:0, o:0, u:0, side:null };
   G.sort((x,y)=>y.date.localeCompare(x.date));
-  const R = G.slice(0, H2H_N), o = R.filter(r=>r.tot>L).length, u = R.filter(r=>r.tot<L).length;
+  const R = G, o = R.filter(r=>r.tot>L).length, u = R.filter(r=>r.tot<L).length;   // todos los enfrentamientos cargados
   return { n:R.length, o, u, side: o>u ? 'OVER' : u>o ? 'UNDER' : null };
 }
 
@@ -1679,11 +1680,11 @@ function renderSeguimiento(){
     const withS = RS.filter(r => r.hs?.side), agree = withS.filter(r => r.hs.side===sugSide(r)), disagree = withS.filter(r => r.hs.side!==sugSide(r));
     const none = RS.filter(r => !r.hs?.side);
     const h2hAlone = withS.filter(r => actSide(r)), h2hW = h2hAlone.filter(r => r.hs.side===actSide(r)).length;
-    const strong = withS.filter(r => r.hs.side===sugSide(r) && Math.max(r.hs.o, r.hs.u) >= 3);
-    $('hsSub').innerHTML = `Para cada partido: los últimos ${H2H_N} enfrentamientos directos (antes de esa fecha) quedaron mayoría OVER o UNDER contra la línea, y ¿coincidió con la sugerencia de <b>${MODEL_LBL[S.model]}</b>?`;
+    const strong = withS.filter(r => r.hs.side===sugSide(r) && r.hs.n >= 3 && Math.max(r.hs.o, r.hs.u) >= 0.75*r.hs.n);
+    $('hsSub').innerHTML = `Para cada partido: los enfrentamientos directos anteriores (todas las temporadas cargadas) quedaron mayoría OVER o UNDER contra la línea, y ¿coincidió con la sugerencia de <b>${MODEL_LBL[S.model]}</b>?`;
     $('hsTable').innerHTML = `<thead><tr><th>Caso</th><th class="n">Partidos</th><th class="n">Acierto de la sugerencia</th></tr></thead><tbody>
       <tr><td>Historial <b>coincide</b> con la sugerencia</td><td class="n">${agree.length}</td><td class="n">${rec(agree)}</td></tr>
-      <tr><td>&nbsp;&nbsp;…y con 3+ de ${H2H_N} del mismo lado</td><td class="n">${strong.length}</td><td class="n">${rec(strong)}</td></tr>
+      <tr><td>&nbsp;&nbsp;…y con 75%+ del mismo lado (mín. 3)</td><td class="n">${strong.length}</td><td class="n">${rec(strong)}</td></tr>
       <tr><td>Historial <b>contrario</b> a la sugerencia</td><td class="n">${disagree.length}</td><td class="n">${rec(disagree)}</td></tr>
       <tr><td>Sin historial o empatado</td><td class="n">${none.length}</td><td class="n">${rec(none)}</td></tr>
       <tr class="sumrow"><td>El historial solo (apostar a lo que dice la mayoría)</td><td class="n">${h2hAlone.length}</td><td class="n">${h2hAlone.length?`<b>${Math.round(100*h2hW/h2hAlone.length)}%</b> <span class="note">(${h2hW}-${h2hAlone.length-h2hW})</span>`:'—'}</td></tr></tbody>`;
@@ -2242,8 +2243,8 @@ function h2hHTML(g, key, line, asOf){
   const sv = S.asOf; S.asOf = asOf; let sug = null; try{ const Q = project(h, a, L, null, g); sug = Q.sug; } finally { S.asOf = sv; }
   const note = `<div class="h2hnote">${L!=null ? `Contra la línea <b>${fmt(L)}</b>: <b style="color:var(--over)">${ov} OVER</b> · <b style="color:var(--under)">${un} UNDER</b>${ok.length-ov-un?` · ${ok.length-ov-un} push`:''} de ${ok.length}
       · promedio <b>${fmt(mean(ok))}</b> (${sgn(mean(ok)-L)} vs. la línea)` : `Promedio <b>${fmt(mean(ok))}</b> en ${ok.length} partidos · pon la línea para ver cuántos fueron OVER y UNDER`}
-      ${sig && sig.n ? `<br>Señal de los últimos ${sig.n}: ${sig.side ? `<span class="neon ${sig.side==='OVER'?'o':'u'}">${sig.side}</span>` : '<b>empate</b>'} (${sig.o} O · ${sig.u} U)${sug && sig.side ? ` · sugerencia de ${MODEL_LBL[S.model]}: <b>${sug}</b> → ${sig.side===sug ? '<span class="pill over" style="font-size:12px">✓ coinciden</span>' : '<span class="pill warn" style="font-size:12px">⚠ contraria</span>'}` : ''}` : ''}</div>`;
-  return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (${games.length}) · prom. ${fmt(mean(ok))}${L!=null?` · ${ov} O / ${un} U`:''}${sig?.side ? ` <span class="neon ${sig.side==='OVER'?'o':'u'}">${sig.side}</span>` : ''}</summary>
+      ${sig && sig.n ? `<br>Señal del historial (${sig.n} partidos): ${sig.side ? `<span class="neon ${sig.side==='OVER'?'o':'u'}">${sig.side}</span>` : '<span class="neon e">EMPATE</span>'} (${sig.o} O · ${sig.u} U)${sug && sig.side ? ` · sugerencia de ${MODEL_LBL[S.model]}: <b>${sug}</b> → ${sig.side===sug ? '<span class="pill over" style="font-size:12px">✓ coinciden</span>' : '<span class="pill warn" style="font-size:12px">⚠ contraria</span>'}` : ''}` : ''}</div>`;
+  return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (${games.length}) · prom. ${fmt(mean(ok))}${L!=null?` · ${ov} O / ${un} U`:''}${sig?.n ? ` <span class="neon ${sig.side==='OVER'?'o':sig.side==='UNDER'?'u':'e'}">${sig.side || 'EMPATE'}</span>` : ''}</summary>
     ${note}
     <table><thead><tr><th>Fecha</th><th>Temp.</th><th>Partido</th><th class="n">Marcador</th><th class="n">${m.label}</th></tr></thead><tbody>
     ${games.map((x,i)=>{ const t=tots[i]; const cls = L==null||t==null?'':t>L?'o':t<L?'u':'';
