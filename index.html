@@ -81,6 +81,9 @@ section{display:none} section.on{display:block}
 .mkt b{color:var(--ink)}
 .h2hnote{font-size:13px;color:var(--muted);margin:8px 0 6px;line-height:1.5}
 .h2hnote b{color:var(--ink)}
+.neon{display:inline-block;font:800 12.5px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;padding:1px 8px;border-radius:5px;color:#111}
+.neon.o{background:#39ff14;box-shadow:0 0 8px rgba(57,255,20,.75)}
+.neon.u{background:#ff2fd6;box-shadow:0 0 8px rgba(255,47,214,.75)}
 .cmp{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;font-size:13px;padding:0 14px 10px}
 .cmp .k{font:600 11px Barlow,sans-serif;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
 .cmp b{color:var(--ink)}
@@ -2239,8 +2242,8 @@ function h2hHTML(g, key, line, asOf){
   const sv = S.asOf; S.asOf = asOf; let sug = null; try{ const Q = project(h, a, L, null, g); sug = Q.sug; } finally { S.asOf = sv; }
   const note = `<div class="h2hnote">${L!=null ? `Contra la línea <b>${fmt(L)}</b>: <b style="color:var(--over)">${ov} OVER</b> · <b style="color:var(--under)">${un} UNDER</b>${ok.length-ov-un?` · ${ok.length-ov-un} push`:''} de ${ok.length}
       · promedio <b>${fmt(mean(ok))}</b> (${sgn(mean(ok)-L)} vs. la línea)` : `Promedio <b>${fmt(mean(ok))}</b> en ${ok.length} partidos · pon la línea para ver cuántos fueron OVER y UNDER`}
-      ${sig && sig.n ? `<br>Señal de los últimos ${sig.n}: <b>${sig.side || 'empate'}</b> (${sig.o} O · ${sig.u} U)${sug && sig.side ? ` · sugerencia de ${MODEL_LBL[S.model]}: <b>${sug}</b> → ${sig.side===sug ? '<span class="pill over" style="font-size:12px">✓ coinciden</span>' : '<span class="pill warn" style="font-size:12px">⚠ contraria</span>'}` : ''}` : ''}</div>`;
-  return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (${games.length}) · prom. ${fmt(mean(ok))}${L!=null?` · ${ov} O / ${un} U`:''}</summary>
+      ${sig && sig.n ? `<br>Señal de los últimos ${sig.n}: ${sig.side ? `<span class="neon ${sig.side==='OVER'?'o':'u'}">${sig.side}</span>` : '<b>empate</b>'} (${sig.o} O · ${sig.u} U)${sug && sig.side ? ` · sugerencia de ${MODEL_LBL[S.model]}: <b>${sug}</b> → ${sig.side===sug ? '<span class="pill over" style="font-size:12px">✓ coinciden</span>' : '<span class="pill warn" style="font-size:12px">⚠ contraria</span>'}` : ''}` : ''}</div>`;
+  return `<details class="det" data-open="${key}|h2h" ${S.open[key+'|h2h']?'open':''}><summary>Historial directo (${games.length}) · prom. ${fmt(mean(ok))}${L!=null?` · ${ov} O / ${un} U`:''}${sig?.side ? ` <span class="neon ${sig.side==='OVER'?'o':'u'}">${sig.side}</span>` : ''}</summary>
     ${note}
     <table><thead><tr><th>Fecha</th><th>Temp.</th><th>Partido</th><th class="n">Marcador</th><th class="n">${m.label}</th></tr></thead><tbody>
     ${games.map((x,i)=>{ const t=tots[i]; const cls = L==null||t==null?'':t>L?'o':t<L?'u':'';
