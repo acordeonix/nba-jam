@@ -1180,18 +1180,17 @@ function valueHTML(E, key){
     ${best && best[1].ev>0 ? `<span class="pill ${best[0]==='OVER'?'over':'under'}">VALOR ${best[0]} +${(best[1].ev*100).toFixed(1)}%</span>` : '<span class="pill">SIN VALOR</span>'}
     ${part('Over', vO, E.pOver)} ${part('Under', vU, 1-E.pOver)}
     ${vig!=null?`<span class="note">comisión de la casa ${(vig*100).toFixed(1)}%</span>`:''}
-    ${stakeNote(E, od)}
   </div>`;
 }
 function stakeNote(E, od){
-  if(E.el!=null || E.proj==null || E.diff==null) return '';            // solo antes del partido
-  const side = E.sug, dec = oddsDec(side==='OVER' ? od.o : od.u); if(!dec) return '';
+  if(E.el!=null || E.proj==null || E.diff==null || !E.diff) return '';   // solo antes del partido
+  const side = E.sug, real = oddsDec(side==='OVER' ? od.o : od.u), dec = real || 1.909;   // sin momio de ese lado: se supone −110
   let st; try{ st = stakeFor(Math.abs(E.diff), dec); } catch { return ''; }
   if(!st) return '';
   const bank = Number(store.get('bank', 0)) || 0;
   return st.pct > 0
-    ? `<span class="stake">Apostar <b>${(100*st.pct).toFixed(1)}%</b> del bank${bank?` = <b>${money(Math.round(bank*st.pct))}</b>`:''} <span class="note">(ventaja ${edgeLbl(st.b)}: ${st.n} partidos, ${st.acc!=null?Math.round(100*st.acc)+'%':'—'} acierto)</span></span>`
-    : `<span class="stake none">No apostar <span class="note">(con ventaja de ${edgeLbl(st.b)} pts el acierto no alcanza: ${st.n} partidos, ${st.acc!=null?Math.round(100*st.acc)+'%':'—'})</span></span>`;
+    ? `<span class="stake">${side}: apostar <b>${(100*st.pct).toFixed(1)}%</b> del bank${bank?` = <b>${money(Math.round(bank*st.pct))}</b>`:''} <span class="note">(ventaja ${edgeLbl(st.b)}: ${st.n} partidos, ${st.acc!=null?Math.round(100*st.acc)+'%':'—'} acierto${real?'':' · momio supuesto −110: captura el del '+side})</span></span>`
+    : `<span class="stake none">No apostar <span class="note">(ventaja de ${edgeLbl(st.b)} pts: ${st.n} partidos, ${st.acc!=null?Math.round(100*st.acc)+'%':'—'} de acierto → estimado ${(100*st.ps).toFixed(1)}% con pocos datos; el momio pide más de ${(100/dec).toFixed(1)}%${real?'':' (supuesto −110)'})</span></span>`;
 }
 
 // ---------- render: partidos ----------
@@ -1351,6 +1350,7 @@ function renderCardsInner(){
         </div>
       </div>
       ${E.sug ? valueHTML(E, key) : ''}
+      ${E.sug && (g.state==='pre' || g.state==='manual') ? `<div class="meta">${stakeNote(E, S.odds[key] || {})}</div>` : ''}
       ${E.sug ? `<div class="meta">
         <span>Prob. over aprox <b>${E.pOver!=null?Math.round(E.pOver*100)+'%':'—'}</b></span>
         ${LV ? '' : `
