@@ -86,6 +86,7 @@ section{display:none} section.on{display:block}
 .abs{font-size:13px;padding:5px 9px;border-radius:8px;border:1px solid;line-height:1.35}
 .abs.out{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.45)}
 .abs.doubt{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.45)}
+.abs .rep{display:block;margin-top:3px;color:var(--muted)} .abs .rep b{color:var(--ink)}
 .abs .st{font:800 11.5px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;margin:0 4px;padding:1px 6px;border-radius:5px;color:#111}
 .abs.out .st{background:#ff4d4d} .abs.doubt .st{background:#ffd23f}
 .h2hnote{font-size:13px;color:var(--muted);margin:8px 0 6px;line-height:1.5}
@@ -2416,13 +2417,57 @@ function keyAbsences(g, team){
   }
   return out.sort((x,y)=> (y.out - x.out) || (y.pts - x.pts));
 }
+// Quién lo reemplaza: en los partidos del equipo sin él (desde que está en el equipo), a quién le subieron los minutos y cuántos puntos sumó
+function replacementInfo(team, aid){
+  const PL = plFor(S.season); if(!PL) return null;
+  const asOf = S.asOf, seasons = new Set([Number(S.season), Number(S.season)-1]);
+  const games = S.games.filter(x => seasons.has(Number(x.season)) && (norm(x.h.t)===team || norm(x.a.t)===team) && (!asOf || x.date < asOf))
+    .sort((x,y)=>y.date.localeCompare(x.date)).slice(0, 60);
+  const rows = games.map(x => ({ date:x.date, tp: norm(x.h.t)===team ? x.h.pts : x.a.pts, ps:(PL.byGame[x.id] || []).filter(o => o.team===team) })).filter(x => x.ps.length);
+  const played = r => r.ps.some(o => o.r[PC.aid]===aid);
+  const firstD = rows.filter(played).map(r=>r.date).sort()[0];
+  if(!firstD) return null;
+  const R = rows.filter(r => r.date >= firstD), W = R.filter(played), WO = R.filter(r => !played(r));
+  const pos = String(aPos(aid)||'').toUpperCase()[0] || '';
+  if(WO.length && W.length >= 3){
+    // por compañero: promedio por partido del equipo (0 si no jugó) con él y sin él, desde que el compañero está en el equipo
+    const mates = new Set(R.flatMap(r => r.ps.map(o => o.r[PC.aid]))); mates.delete(aid);
+    const res = [];
+    for(const m of mates){
+      const f = R.filter(r => r.ps.some(o => o.r[PC.aid]===m)).map(r=>r.date).sort()[0];
+      const w = W.filter(r => r.date >= f), wo = WO.filter(r => r.date >= f); if(!wo.length || w.length < 2) continue;
+      const g = (L, k) => mean(L.map(r => { const o = r.ps.find(o => o.r[PC.aid]===m); return o ? (k==='st' ? (o.r[PC.st]===1?1:0) : o.r[PC[k]]) : 0; }));
+      res.push({ aid:m, dMin: g(wo,'min') - g(w,'min'), pW: g(w,'pts'), pWO: g(wo,'pts'), stW: g(w,'st'), stWO: g(wo,'st'), n: wo.length });
+    }
+    const sub = res.filter(x => x.dMin >= 3).sort((x,y) => (y.stWO - y.stW) - (x.stWO - x.stW) || y.dMin - x.dMin).slice(0, 2);
+    return { mode:'hist', n:WO.length, sub, teamW: mean(W.map(r=>r.tp)), teamWO: mean(WO.map(r=>r.tp)) };
+  }
+  // nunca ha faltado: el suplente de su posición con más minutos
+  const rot = teamRotation(PL, team, asOf).filter(r => r.aid!==aid && !r.lastStarter && !isOut(S.rost?.inj?.[r.aid]));
+  const same = rot.filter(r => (String(aPos(r.aid)||'').toUpperCase()[0] || '') === pos);
+  const c = (same.length ? same : rot).sort((x,y)=>(y.min||0)-(x.min||0))[0];
+  if(!c) return null;
+  const L = (c.L || []).slice(-20).filter(o => o.r[PC.min] > 0);
+  return { mode:'pos', sub:[{ aid:c.aid, pW: L.length ? mean(L.map(o=>o.r[PC.pts])) : null, min: L.length ? mean(L.map(o=>o.r[PC.min])) : null }] };
+}
+function replacementHTML(team, x){
+  const r = replacementInfo(team, x.aid); if(!r || !r.sub.length) return '';
+  if(r.mode==='hist'){
+    const sub = r.sub.map(m => `<b>${esc(aName(m.aid))}</b> (+${fmt(m.dMin,0)} min, ${fmt(m.pW)} → <b>${fmt(m.pWO)}</b> pts${m.stWO - m.stW >= 0.4 ? ', titular' : ''})`).join(' y ');
+    const lost = r.sub.reduce((t,m)=>t + (m.pWO - m.pW), 0);
+    return `<span class="rep">↳ Sin él (${r.n} partido${r.n>1?'s':''}) lo suplió ${sub}: recuperan <b>${fmt(lost)}</b> de sus ${fmt(x.pts)} pts.
+      El equipo anotó <b>${fmt(r.teamWO)}</b> sin él vs ${fmt(r.teamW)} con él${r.n < 3 ? ' <span class="note">(pocos partidos, tómalo con cuidado)</span>' : ''}.</span>`;
+  }
+  const m = r.sub[0];
+  return `<span class="rep">↳ Probable reemplazo (aún no ha faltado con este equipo): <b>${esc(aName(m.aid))}</b> ${esc(aPos(m.aid))}, promedia ${fmt(m.pW)} pts en ${fmt(m.min,0)} min.</span>`;
+}
 function absenceHTML(g){
   if(g.state==='post' || g.manual) return '';
   const all = [[g.a.t, keyAbsences(g, g.a.t)], [g.h.t, keyAbsences(g, g.h.t)]].filter(([,L]) => L.length);
   if(!all.length) return '';
   return `<div class="absrow">${all.map(([t, L]) => L.map(x => `<span class="abs ${x.out?'out':'doubt'}" title="${esc(x.status)}">
     ${x.out?'⛔':'⚠️'} <b>${t}</b> ${esc(aName(x.aid))} <span class="st">${x.out?'FUERA':'EN DUDA'}</span>
-    <span class="note">${fmt(x.pts)} pts · ${fmt(x.min,0)} min${x.missed>=2 ? ` · ya no jugó los últimos ${x.missed} (la línea seguramente ya lo considera)` : x.missed===1 ? ' · tampoco jugó el partido anterior' : x.out ? ' · <b>baja nueva</b>: jugó el último partido' : ''}</span></span>`).join('')).join('')}</div>`;
+    <span class="note">${fmt(x.pts)} pts · ${fmt(x.min,0)} min${x.missed>=2 ? ` · ya no jugó los últimos ${x.missed} (la línea seguramente ya lo considera)` : x.missed===1 ? ' · tampoco jugó el partido anterior' : x.out ? ' · <b>baja nueva</b>: jugó el último partido' : ''}</span>${replacementHTML(t, x)}</span>`).join('')).join('')}</div>`;
 }
 
 // ---------- historial directo ----------
