@@ -82,6 +82,12 @@ section{display:none} section.on{display:block}
 .stake{display:block;width:100%;margin-top:4px;font-size:13.5px}
 .stake b{color:var(--ink)}
 .stake.none{color:var(--muted)}
+.absrow{display:flex;flex-direction:column;gap:5px;padding:0 14px 10px}
+.abs{font-size:13px;padding:5px 9px;border-radius:8px;border:1px solid;line-height:1.35}
+.abs.out{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.45)}
+.abs.doubt{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.45)}
+.abs .st{font:800 11.5px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;margin:0 4px;padding:1px 6px;border-radius:5px;color:#111}
+.abs.out .st{background:#ff4d4d} .abs.doubt .st{background:#ffd23f}
 .h2hnote{font-size:13px;color:var(--muted);margin:8px 0 6px;line-height:1.5}
 .h2hnote b{color:var(--ink)}
 .neon{display:inline-block;font:800 12.5px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;padding:1px 8px;border-radius:5px;color:#111}
@@ -1332,6 +1338,7 @@ function renderCardsInner(){
         <div class="tm">${badge(a)} ${tname(a)} <small>visita</small>${restTag(P.rest?.rA)}</div><div class="v">${fmt(P.A.f,1)} / ${fmt(P.A.c,1)}</div><div class="s">${sCell(curA, scoreA)}</div>
         <div class="tm">${badge(h)} ${tname(h)} <small>local</small>${restTag(P.rest?.rH)}</div><div class="v">${fmt(P.H.f,1)} / ${fmt(P.H.c,1)}</div><div class="s">${sCell(curH, scoreH)}</div>
       </div>
+      ${absenceHTML(g)}
       <div class="meta" style="padding-top:0"><span>a favor / en contra · ${m.label.toLowerCase()} · GP ${carryTxt(P.A)}/${carryTxt(P.H)}</span>${(P.A.logs||[]).some(x=>x.prev)||(P.H.logs||[]).some(x=>x.prev)?`<span class="note">(+ juegos de ${S.season-2}-${String(S.season-1).slice(2)} mientras llevan menos de ${CARRY})</span>`:''}</div>
       <div class="proj">
         <div><div class="k">${P.proj!=null && Math.abs(P.base-P.proj)>=0.05 ? 'Proy. ajustada' : 'Proyección total'}</div><div class="big">${fmt(P.proj)}</div>${P.proj!=null && Math.abs(P.base-P.proj)>=0.05 ? `<div class="note">base ${fmt(P.base)}</div>`:''}</div>
@@ -2387,6 +2394,36 @@ function injuriesFor(id, team){
   return o;
 }
 const isOut = s => /out|suspen/i.test(s||'');
+const isDoubt = s => !isOut(s) && /day-to-day|questionable|doubtful|probable|game-time|gtd/i.test(s||'');
+// Alerta de bajas importantes: los 3 que más anotan del equipo, o 15+ pts, o 28+ min (últimos 20 juegos)
+function keyAbsences(g, team){
+  const PL = plFor(S.season); if(!PL) return [];
+  const inj = injuriesFor(g.id, team); if(!Object.keys(inj).length) return [];
+  const asOf = S.asOf, stat = aid => { const L = (PL.by[aid] || []).filter(o => !asOf || o.date < asOf).slice(-20).filter(o => o.r[PC.min] > 0);
+    return L.length ? { gp:L.length, pts: mean(L.map(o=>o.r[PC.pts])), min: mean(L.map(o=>o.r[PC.min])), last: L.at(-1).date } : null; };
+  // ranking del equipo: rotación actual + los lesionados
+  const rot = teamRotation(PL, team, asOf).map(r => r.aid);
+  const pool = [...new Set([...rot, ...Object.keys(inj)])].map(aid => ({ aid, ...(stat(aid) || {}) })).filter(x => x.gp);
+  const top3 = new Set([...pool].sort((x,y)=>y.pts-x.pts).slice(0,3).map(x=>x.aid));
+  const tl = (teamLogs()[team] || []).filter(x => !asOf || x.date < asOf);
+  const out = [];
+  for(const [aid, status] of Object.entries(inj)){
+    if(!isOut(status) && !isDoubt(status)) continue;
+    const x = pool.find(p => p.aid===aid); if(!x) continue;
+    if(!(top3.has(aid) || x.pts >= 15 || x.min >= 28)) continue;
+    const missed = tl.filter(t => t.date > x.last).length;   // juegos del equipo desde su último partido
+    out.push({ aid, status, out: isOut(status), pts:x.pts, min:x.min, missed });
+  }
+  return out.sort((x,y)=> (y.out - x.out) || (y.pts - x.pts));
+}
+function absenceHTML(g){
+  if(g.state==='post' || g.manual) return '';
+  const all = [[g.a.t, keyAbsences(g, g.a.t)], [g.h.t, keyAbsences(g, g.h.t)]].filter(([,L]) => L.length);
+  if(!all.length) return '';
+  return `<div class="absrow">${all.map(([t, L]) => L.map(x => `<span class="abs ${x.out?'out':'doubt'}" title="${esc(x.status)}">
+    ${x.out?'⛔':'⚠️'} <b>${t}</b> ${esc(aName(x.aid))} <span class="st">${x.out?'FUERA':'EN DUDA'}</span>
+    <span class="note">${fmt(x.pts)} pts · ${fmt(x.min,0)} min${x.missed>=2 ? ` · ya no jugó los últimos ${x.missed} (la línea seguramente ya lo considera)` : x.missed===1 ? ' · tampoco jugó el partido anterior' : x.out ? ' · <b>baja nueva</b>: jugó el último partido' : ''}</span></span>`).join('')).join('')}</div>`;
+}
 
 // ---------- historial directo ----------
 function h2hHTML(g, key, line, asOf){
