@@ -82,6 +82,16 @@ section{display:none} section.on{display:block}
 .stake{display:block;width:100%;margin-top:4px;font-size:13.5px}
 .stake b{color:var(--ink)}
 .stake.none{color:var(--muted)}
+.charts{--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--grid:rgba(120,120,120,.18);--axis:var(--muted);margin-bottom:16px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .charts{--s1:#3987e5;--s2:#d95926;--s3:#199e70}}
+:root[data-theme="dark"] .charts{--s1:#3987e5;--s2:#d95926;--s3:#199e70}
+.chartcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.chartcard h3{margin:0 0 2px;font:700 15px Barlow,sans-serif}
+.chartcard svg{width:100%;height:auto;display:block;overflow:visible}
+.chartcard svg text{fill:var(--muted);font:11px Barlow,sans-serif}
+.chartcard .lgd{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;margin:6px 0 2px}
+.chartcard .lgd i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.chtip{position:fixed;pointer-events:none;z-index:50;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12.5px;box-shadow:0 4px 18px rgba(0,0,0,.25);display:none}
 .absrow{display:flex;flex-direction:column;gap:5px;padding:0 14px 10px}
 .abs{font-size:13px;padding:5px 9px;border-radius:8px;border:1px solid;line-height:1.35}
 .abs.out{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.45)}
@@ -251,6 +261,7 @@ tr.click{cursor:pointer}
       <button data-t="hoy" class="on">Partidos</button>
       <button data-t="equipos">Equipos (OFF/DEF)</button>
       <button data-t="registro">Registro por juego</button>
+      <button data-t="graficas">Gráficas</button>
       <button data-t="jugadores">Jugadores</button>
       <button data-t="ranking">Ranking</button>
       <button data-t="picks">Mis picks</button>
@@ -295,6 +306,37 @@ tr.click{cursor:pointer}
         <select id="regView"><option value="tot">Total del partido</option><option value="f">Solo el equipo</option><option value="c">Solo el rival</option></select></div>
     </div>
     <div class="tablewrap"><table id="regTable"></table></div>
+  </section>
+
+  <section id="s-graficas">
+    <h2>Gráficas</h2>
+    <p class="sub">Tendencias por semana, campana de Gauss y análisis 80/20 (Pareto). Respetan la temporada y el parámetro de arriba.</p>
+    <div class="charts">
+      <div class="row" style="margin-bottom:8px">
+        <div class="ctl"><label for="chT1">Equipo 1</label><select id="chT1" class="chT"></select></div>
+        <div class="ctl"><label for="chT2">Equipo 2</label><select id="chT2" class="chT"></select></div>
+        <div class="ctl"><label for="chT3">Equipo 3</label><select id="chT3" class="chT"></select></div>
+        <div class="ctl"><label for="grView">Valor</label><select id="grView"><option value="tot">Total del partido</option><option value="f">Solo el equipo</option><option value="c">Solo el rival</option></select></div>
+        <div class="ctl"><label for="grLine">Línea (campana)</label><input type="number" step="0.5" id="grLine" placeholder="ej. 225.5"></div>
+        <div class="ctl"><label for="chData">Campana con</label><select id="chData"><option value="cur">Esta temporada</option><option value="both">Esta y la pasada</option></select></div>
+      </div>
+      <div class="chartcard"><h3>Promedio por semana</h3><p class="note" id="chWeekSub"></p><div id="chWeek"></div></div>
+      <div class="chartcard"><h3>Campana de Gauss</h3><p class="note" id="chGaussSub"></p><div id="chGauss"></div></div>
+      <div class="chartcard"><h3>¿Los partidos terminan arriba o abajo de la línea? (toda la liga, por semana)</h3><p class="note" id="chLineSub"></p><div id="chLine"></div></div>
+      <div class="chartcard"><h3>Pareto de ganancias: ¿qué genera el 80% de lo ganado?</h3>
+        <div class="row" style="margin:6px 0"><div class="ctl"><label for="paBy">Agrupar por</label><select id="paBy"><option value="team">Equipo</option><option value="edge">Tamaño de ventaja</option><option value="side">OVER / UNDER</option><option value="rest">Descanso</option><option value="cons">Consenso de modelos</option><option value="fav">Favorito (spread)</option></select></div>
+          <div class="ctl"><label for="paModel">Modelo</label><select id="paModel"><option value="pace">Ritmo × eficiencia</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option></select></div></div>
+        <p class="note" id="paSub"></p><div id="paChart"></div></div>
+      <div class="chartcard"><h3>Pareto de jugadores: ¿quién hace el 80% de los puntos?</h3>
+        <p class="note" id="pjSub"></p><div id="pjChart"></div>
+        <h3 style="margin-top:14px">Dependencia de sus 3 mejores (toda la liga)</h3><p class="note">% de los puntos del equipo que hacen sus 3 máximos anotadores. Los de arriba sufren más cuando falta uno.</p><div id="pjDep"></div></div>
+      <div class="chartcard"><h3>Proyección vs. resultado real (partido por partido)</h3>
+        <div class="row" style="margin:6px 0"><div class="ctl"><label for="scModel">Modelo</label><select id="scModel"><option value="pace">Ritmo × eficiencia</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option></select></div></div>
+        <p class="note" id="scSub"></p><div id="scChart"></div><div id="scMiss"></div></div>
+      <div class="chartcard"><h3>Mapa de calor: equipo × semana</h3>
+        <div class="row" style="margin:6px 0"><div class="ctl"><label for="hmVal">Valor</label><select id="hmVal"><option value="line">Total real − línea</option><option value="proj">Total real − proyección (modelo de arriba)</option></select></div></div>
+        <p class="note" id="hmSub"></p><div id="hmChart" style="overflow-x:auto"></div></div>
+    </div>
   </section>
 
   <section id="s-jugadores">
@@ -2291,6 +2333,258 @@ function renderRegistro(){
   $('regTable').innerHTML = html + '</tbody>';
 }
 $('regLine').addEventListener('input', renderRegistro);
+// ---------- gráficas del registro ----------
+const CH_COL = ['var(--s1)','var(--s2)','var(--s3)'];
+const weekOf = d => { const x = new Date(d+'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay()+6)%7)); return x.toISOString().slice(0,10); };
+const shortD = d => new Date(d+'T12:00:00Z').toLocaleDateString('es-MX',{ day:'numeric', month:'short', timeZone:'UTC' }).replace('.','');
+let chTip = null;
+function tipShow(e, html){ if(!chTip){ chTip = document.createElement('div'); chTip.className = 'chtip'; document.body.appendChild(chTip); }
+  chTip.innerHTML = html; chTip.style.display = 'block'; const w = chTip.offsetWidth; chTip.style.left = Math.min(innerWidth - w - 8, e.clientX + 12) + 'px'; chTip.style.top = (e.clientY + 14) + 'px'; }
+function tipHide(){ if(chTip) chTip.style.display = 'none'; }
+function niceTicks(lo, hi, n=5){ const span = hi - lo || 1, step0 = span / n, mag = 10**Math.floor(Math.log10(step0)), step = [1,2,2.5,5,10].map(k=>k*mag).find(k=>span/k <= n) || 10*mag;
+  const out = []; for(let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(6)); return out; }
+function renderCharts(){
+  const sels = [...document.querySelectorAll('.chT')];
+  if(!sels[0].options.length){ const opts = '<option value="">—</option>' + Object.keys(TEAMS).sort((x,y)=>tname(x).localeCompare(tname(y))).map(t=>`<option value="${t}">${tname(t)}</option>`).join('');
+    sels.forEach((el,i) => { el.innerHTML = opts; el.value = store.get('chT'+(i+1), i===0 ? 'DET' : ''); }); }
+  const teams = sels.map(el => el.value).filter(Boolean);
+  const f = METRICS[S.metric].f, view = $('grView').value, vLbl = view==='f' ? 'lo que hace el equipo' : view==='c' ? 'lo que le hacen' : 'total del partido';
+  const logs = teamLogs(), val = x => { const a=f(x.me), b=f(x.op); if(a==null||b==null) return null; return view==='f'?a:view==='c'?b:a+b; };
+  // ---- 1) promedio por semana ----
+  const allWeeks = [...new Set(seasonGames().map(g => weekOf(g.date)))].sort();
+  const lg = {}; for(const t in logs) for(const x of logs[t]){ const v = val(x); if(v==null) continue; (lg[weekOf(x.date)] ||= []).push(v); }
+  const series = teams.map((t,i) => { const by = {}; for(const x of logs[t]||[]){ const v = val(x); if(v==null) continue; (by[weekOf(x.date)] ||= []).push({ v, x }); }
+    return { t, col: CH_COL[i], pts: allWeeks.map(w => by[w] ? { w, v: mean(by[w].map(o=>o.v)), n: by[w].length, games: by[w] } : null) }; });
+  const lgPts = allWeeks.map(w => lg[w] ? { w, v: mean(lg[w]) } : null);
+  $('chWeekSub').textContent = `${METRICS[S.metric].label}: ${vLbl}, promedio de cada semana (lunes a domingo). Línea punteada = promedio de la liga.`;
+  if(allWeeks.length < 1){ $('chWeek').innerHTML = '<p class="note">Sin partidos esta temporada.</p>'; }
+  else {
+    const W = 760, H = 240, pl = 44, pr = 60, pt = 12, pb = 26;
+    const vals = [...series.flatMap(s => s.pts.filter(Boolean).map(p=>p.v)), ...lgPts.filter(Boolean).map(p=>p.v)];
+    let lo = Math.min(...vals), hi = Math.max(...vals); const pad = Math.max(2, (hi-lo)*0.12); lo -= pad; hi += pad;
+    const X = i => allWeeks.length===1 ? pl + (W-pl-pr)/2 : pl + i*(W-pl-pr)/(allWeeks.length-1), Y = v => pt + (H-pt-pb)*(1-(v-lo)/(hi-lo));
+    const ticks = niceTicks(lo, hi, 5);
+    const path = pts => { let d = '', pen = false; pts.forEach((p,i) => { if(!p){ pen = false; return; } d += `${pen?'L':'M'}${X(i).toFixed(1)},${Y(p.v).toFixed(1)} `; pen = true; }); return d; };
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Promedio por semana">`;
+    svg += ticks.map(v => `<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${pl-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>`).join('');
+    svg += allWeeks.map((w,i) => (allWeeks.length<=12 || i%2===0) ? `<text x="${X(i)}" y="${H-8}" text-anchor="middle">${shortD(w)}</text>` : '').join('');
+    svg += `<path d="${path(lgPts)}" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="5 4"/>`;
+    const ends = [];
+    const lastLg = [...lgPts].reverse().find(Boolean); if(lastLg) ends.push({ x: X(allWeeks.indexOf(lastLg.w))+8, y: Y(lastLg.v)+4, txt:`Liga ${fmt(lastLg.v)}`, ink:false });
+    for(const s of series){ svg += `<path d="${path(s.pts)}" fill="none" stroke="${s.col}" stroke-width="2"/>`;
+      s.pts.forEach((p,i) => { if(!p) return; svg += `<circle cx="${X(i)}" cy="${Y(p.v)}" r="4.5" fill="${s.col}" stroke="var(--panel)" stroke-width="2"/>`; });
+      const last = [...s.pts].reverse().find(Boolean); if(last) ends.push({ x: X(allWeeks.indexOf(last.w))+8, y: Y(last.v)+4, txt:`${s.t} ${fmt(last.v)}`, ink:true }); }
+    // etiquetas al final de cada línea sin encimarse
+    ends.sort((a,b)=>a.y-b.y); for(let i=1;i<ends.length;i++) if(ends[i].y - ends[i-1].y < 14) ends[i].y = ends[i-1].y + 14;
+    svg += ends.map(e => `<text x="${e.x}" y="${e.y}" ${e.ink?'style="fill:var(--ink);font-weight:600"':''}>${e.txt}</text>`).join('');
+    // zonas de hover por semana
+    svg += allWeeks.map((w,i) => `<rect class="hz" data-i="${i}" x="${X(i)-(W-pl-pr)/Math.max(1,allWeeks.length-1)/2}" y="${pt}" width="${(W-pl-pr)/Math.max(1,allWeeks.length-1)}" height="${H-pt-pb}" fill="transparent"/>`).join('');
+    svg += `</svg>`;
+    $('chWeek').innerHTML = `<div class="lgd">${series.map(s=>`<span><i style="background:${s.col}"></i>${tname(s.t)}</span>`).join('')}<span><i style="background:var(--muted)"></i>Liga</span></div>` + svg;
+    $('chWeek').querySelectorAll('.hz').forEach(r => { const i = +r.dataset.i;
+      r.addEventListener('mousemove', e => tipShow(e, `<b>Semana del ${shortD(allWeeks[i])}</b><br>${series.map(s => s.pts[i] ? `<span style="color:${s.col}">●</span> ${s.t}: <b>${fmt(s.pts[i].v)}</b> <span class="note">(${s.pts[i].n} juego${s.pts[i].n>1?'s':''}: ${s.pts[i].games.map(o=>`${o.x.ha==='H'?'vs':'@'} ${o.x.opp} ${o.v}`).join(', ')})</span>` : `${s.t}: sin juegos`).join('<br>')}<br>Liga: ${lgPts[i]?fmt(lgPts[i].v):'—'}`));
+      r.addEventListener('mouseleave', tipHide); });
+  }
+  // ---- 2) campana de Gauss ----
+  const gT = teams[0] || null, both = $('chData').value==='both';
+  let gl = [];
+  if(gT){ gl = (logs[gT] || []).map(val).filter(v=>v!=null); if(both) gl = [...(prevSeasonLogs()[gT] || []).map(val).filter(v=>v!=null), ...gl]; }
+  else { for(const t in logs) for(const x of logs[t]) if(x.ha==='H'){ const v = val(x); if(v!=null) gl.push(v); } }
+  const Lr = $('grLine').value==='' ? null : Number($('grLine').value);
+  if(gl.length < 3){ $('chGaussSub').textContent = ''; $('chGauss').innerHTML = `<p class="note">Se necesitan al menos 3 partidos${gT?` de ${tname(gT)}`:''}. Prueba "Esta y la pasada".</p>`; }
+  else {
+    const mu = mean(gl), sg = sd(gl) || 1, W = 760, H = 230, pl = 44, pr = 20, pt = 16, pb = 30;
+    const lo = Math.min(Math.min(...gl), mu - 3*sg), hi = Math.max(Math.max(...gl), mu + 3*sg);
+    const nb = Math.min(18, Math.max(6, Math.round(Math.sqrt(gl.length)*2))), bw = (hi-lo)/nb;
+    const bins = Array.from({length:nb}, (_,i) => ({ a: lo+i*bw, b: lo+(i+1)*bw, n:0 }));
+    for(const v of gl) bins[Math.min(nb-1, Math.floor((v-lo)/bw))].n++;
+    const pdf = x => Math.exp(-0.5*((x-mu)/sg)**2) / (sg*Math.sqrt(2*Math.PI));
+    const ymax = Math.max(...bins.map(b=>b.n/(gl.length*bw)), pdf(mu)) * 1.15;
+    const X = v => pl + (W-pl-pr)*(v-lo)/(hi-lo), Y = d => pt + (H-pt-pb)*(1 - d/ymax);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Campana de Gauss">`;
+    svg += niceTicks(lo, hi, 8).map(v => `<line x1="${X(v)}" x2="${X(v)}" y1="${pt}" y2="${H-pb}" stroke="var(--grid)"/><text x="${X(v)}" y="${H-10}" text-anchor="middle">${v}</text>`).join('');
+    // zona arriba de la línea
+    if(Lr!=null && Lr > lo && Lr < hi){ let d = `M${X(Lr)},${Y(0)} `; for(let v = Lr; v <= hi; v += (hi-lo)/120) d += `L${X(v).toFixed(1)},${Y(pdf(v)).toFixed(1)} `; d += `L${X(hi)},${Y(0)} Z`;
+      svg += `<path d="${d}" fill="var(--over)" opacity=".16"/>`; }
+    svg += bins.map((b,i) => { const h = b.n/(gl.length*bw); return b.n ? `<rect class="hb" data-i="${i}" x="${X(b.a)+1}" y="${Y(h)}" width="${Math.max(1, X(b.b)-X(b.a)-2)}" height="${Y(0)-Y(h)}" rx="3" fill="var(--s1)" opacity=".55"/>` : ''; }).join('');
+    let c = ''; for(let v = lo; v <= hi; v += (hi-lo)/160) c += `${c?'L':'M'}${X(v).toFixed(1)},${Y(pdf(v)).toFixed(1)} `;
+    svg += `<path d="${c}" fill="none" stroke="var(--s2)" stroke-width="2.2"/>`;
+    for(const [k,lbl] of [[0,'μ'],[-1,'−1σ'],[1,'+1σ'],[-2,'−2σ'],[2,'+2σ']]){ const v = mu + k*sg; if(v<lo||v>hi) continue;
+      svg += `<line x1="${X(v)}" x2="${X(v)}" y1="${pt}" y2="${H-pb}" stroke="var(--muted)" stroke-dasharray="${k?'3 4':'0'}" stroke-width="${k?1:1.5}"/><text x="${X(v)}" y="${pt-3}" text-anchor="middle">${lbl} ${fmt(v,0)}</text>`; }
+    if(Lr!=null) svg += `<line x1="${X(Lr)}" x2="${X(Lr)}" y1="${pt}" y2="${H-pb}" stroke="var(--over)" stroke-width="2"/><text x="${X(Lr) + (Lr < mu ? -6 : 6)}" y="${pt+26}" text-anchor="${Lr < mu ? 'end' : 'start'}" style="fill:var(--ink);font-weight:600">Línea ${Lr}</text>`;
+    svg += `</svg>`;
+    const pO = Lr!=null ? 1 - phi((Lr - mu)/sg) : null, eO = Lr!=null ? gl.filter(v=>v>Lr).length/gl.length : null;
+    $('chGaussSub').innerHTML = `${gT ? tname(gT) : 'Toda la liga (un dato por partido)'} · ${METRICS[S.metric].label}, ${vLbl} · ${gl.length} partidos. Promedio <b>${fmt(mu)}</b>, desviación <b>${fmt(sg)}</b>: 2 de cada 3 partidos caen entre ${fmt(mu-sg,0)} y ${fmt(mu+sg,0)}.
+      ${Lr!=null ? `Con la línea <b>${Lr}</b>: según la campana, <b>${Math.round(100*pO)}%</b> OVER; en la realidad fueron <b>${Math.round(100*eO)}%</b> (${gl.filter(v=>v>Lr).length} de ${gl.length}).` : 'Escribe una línea en "Línea (campana)" para ver qué % cae arriba de ella.'}`;
+    $('chGauss').innerHTML = `<div class="lgd"><span><i style="background:var(--s1);opacity:.6"></i>Partidos (barras)</span><span><i style="background:var(--s2)"></i>Curva normal</span>${Lr!=null?'<span><i style="background:var(--over)"></i>Línea y zona OVER</span>':''}</div>` + svg;
+    $('chGauss').querySelectorAll('.hb').forEach(r => { const b = bins[+r.dataset.i];
+      r.addEventListener('mousemove', e => tipShow(e, `<b>${fmt(b.a,0)} – ${fmt(b.b,0)}</b><br>${b.n} partido${b.n>1?'s':''} (${Math.round(100*b.n/gl.length)}%)`)); r.addEventListener('mouseleave', tipHide); });
+  }
+  // ---- 3) real − línea por semana (liga) ----
+  const wk = {};
+  for(const g of seasonGames()){ const k = lineKey(g.id), preH = (S.hist[k] || []).filter(e => e.label==='Pre' && e.line!=null).at(-1);
+    const L = preH ? preH.line : (S.metric==='pts' ? g.mk?.ou : null), a = f(g.h), b = f(g.a); if(L==null || a==null || b==null) continue;
+    (wk[weekOf(g.date)] ||= []).push(a + b - L); }
+  const wks = Object.keys(wk).sort();
+  $('chLineSub').textContent = `Promedio por semana de (total real − línea), todos los partidos con línea (la tuya o la de DraftKings). Barra arriba = la semana terminó más alto que la línea (OVER); abajo = UNDER.`;
+  if(!wks.length){ $('chLine').innerHTML = '<p class="note">Sin partidos con línea en este parámetro.</p>'; }
+  else {
+    const W = 760, H = 200, pl = 44, pr = 20, pt = 14, pb = 26, vals = wks.map(w => mean(wk[w])), m = Math.max(4, ...vals.map(Math.abs)) * 1.2;
+    const bwid = Math.min(60, (W-pl-pr)/wks.length*0.6), X = i => pl + (i+0.5)*(W-pl-pr)/wks.length, Y = v => pt + (H-pt-pb)*(1 - (v + m)/(2*m));
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Real menos línea por semana">`;
+    svg += niceTicks(-m, m, 4).map(v => `<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v===0?'var(--muted)':'var(--grid)'}"/><text x="${pl-6}" y="${Y(v)+4}" text-anchor="end">${v>0?'+':''}${v}</text>`).join('');
+    svg += wks.map((w,i) => { const v = vals[i], y0 = Y(0), y1 = Y(v), top = Math.min(y0,y1), h = Math.max(1, Math.abs(y1-y0));
+      return `<rect class="lb" data-i="${i}" x="${X(i)-bwid/2}" y="${top}" width="${bwid}" height="${h}" rx="4" fill="${v>=0?'var(--over)':'var(--under)'}" opacity=".85"/>
+        <text x="${X(i)}" y="${v>=0?top-5:top+h+12}" text-anchor="middle" style="fill:var(--ink)">${v>0?'+':''}${fmt(v)}</text><text x="${X(i)}" y="${H-8}" text-anchor="middle">${shortD(w)}</text>`; }).join('');
+    svg += `</svg>`;
+    $('chLine').innerHTML = svg;
+    $('chLine').querySelectorAll('.lb').forEach(r => { const i = +r.dataset.i, L = wk[wks[i]], o = L.filter(v=>v>0).length;
+      r.addEventListener('mousemove', e => tipShow(e, `<b>Semana del ${shortD(wks[i])}</b><br>${L.length} partidos · real − línea <b>${sgn(mean(L))}</b><br>${o} OVER · ${L.filter(v=>v<0).length} UNDER`)); r.addEventListener('mouseleave', tipHide); });
+  }
+  try{ paretoProfit(); } catch(e){ console.warn('pareto', e); }
+  paretoPlayers();
+  try{ scatterProj(); heatTeamWeek(); } catch(e){ console.warn('scatter/heat', e); }
+}
+// ---------- Pareto (80/20) ----------
+function hbars(items, opt={}){
+  // items: [{label, v, sub, hl}] — barras horizontales desde 0 (positivas a la derecha, negativas a la izquierda)
+  const W = 760, rowH = 22, pl = opt.pl || 150, pr = 150, H = items.length*rowH + 8;
+  const mx = Math.max(...items.map(x=>Math.abs(x.v)), 0.01), hasNeg = items.some(x=>x.v<0);
+  const x0 = hasNeg ? pl + (W-pl-pr)*(Math.max(0, -Math.min(...items.map(x=>x.v)))/(mx + Math.max(0,-Math.min(...items.map(x=>x.v))))) : pl;
+  const scale = (W - pr - x0) / mx, scaleN = hasNeg ? (x0 - pl) / Math.max(0.01, -Math.min(...items.map(x=>x.v))) : 0;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  if(hasNeg) svg += `<line x1="${x0}" x2="${x0}" y1="0" y2="${H}" stroke="var(--muted)"/>`;
+  items.forEach((it,i) => { const y = 4 + i*rowH, w = it.v>=0 ? it.v*scale : -it.v*scaleN, x = it.v>=0 ? x0 : x0 - w;
+    const fill = opt.color ? opt.color(it) : (it.v>=0 ? 'var(--over)' : 'var(--under)');
+    svg += `<text x="${pl-8}" y="${y+14}" text-anchor="end" style="fill:var(--ink)${it.hl?';font-weight:700':''}">${it.label}</text>
+      <rect class="pb" data-i="${i}" x="${x}" y="${y+3}" width="${Math.max(1,w)}" height="${rowH-8}" rx="4" fill="${fill}" opacity="${it.hl===false?.35:.9}"/>
+      <text x="${W-pr+8}" y="${y+14}" style="fill:var(--ink)">${it.txt ?? ''}</text>`; });
+  return svg + `</svg>`;
+}
+function paretoProfit(){
+  const by = $('paBy').value, mo = $('paModel').value;
+  const all = preRows();
+  const rows = all.filter(r => r.mo===mo);
+  if(!rows.length){ $('paSub').textContent = ''; $('paChart').innerHTML = '<p class="note">Todavía no hay partidos con línea.</p>'; return; }
+  const sidesBy = {}; for(const r of all) (sidesBy[r.id] ||= {})[r.mo] = r.side;
+  const keysOf = r => {
+    if(by==='team') return [r.h, r.a];
+    if(by==='edge'){ const e = Math.abs(r.p - r.line), b = EDGE_B.find(b => e >= b[0] && e < b[1]); return [`Ventaja ${edgeLbl(b)} pts`]; }
+    if(by==='side') return [`Modelo dice ${r.side}`];
+    if(by==='rest'){ const sv2 = S.asOf; S.asOf = r.date; const bh = restDays(r.h, r.date)===0, ba = restDays(r.a, r.date)===0; S.asOf = sv2;
+      return [bh && ba ? 'Ambos en B2B' : bh || ba ? 'Uno en B2B' : 'Ninguno en B2B']; }
+    if(by==='cons'){ const ss = ['pace','avg','mix','players'].map(k => sidesBy[r.id]?.[k]).filter(Boolean), o = ss.filter(x=>x==='OVER').length, ag = Math.max(o, ss.length-o);
+      return [ss.length<4 ? 'Sin los 4 modelos' : ag===4 ? 'Los 4 de acuerdo' : ag===3 ? '3 de 4 de acuerdo' : 'Divididos 2-2']; }
+    if(by==='fav'){ const sp = Math.abs(finalFromDB(r.id)?.mk?.sp ?? NaN); return [Number.isNaN(sp) ? 'Sin spread' : sp >= 10 ? 'Favorito por 10+' : sp >= 5 ? 'Favorito por 5–9.5' : 'Parejo (menos de 5)']; }
+    return ['—'];
+  };
+  const G = {};
+  for(const r of rows) for(const k of keysOf(r)){ const g = (G[k] ||= { k, u:0, w:0, l:0, n:0 }); g.u += r.units; g.n++; if(r.res==='W') g.w++; else if(r.res==='L') g.l++; }
+  const list = Object.values(G).sort((x,y)=>y.u-x.u), pos = list.filter(g=>g.u>0), totPos = pos.reduce((t,g)=>t+g.u,0);
+  let cum = 0; const core = new Set(); for(const g of pos){ if(cum < 0.8*totPos){ core.add(g.k); } cum += g.u; }
+  const neg = list.filter(g=>g.u<0), totNeg = neg.reduce((t,g)=>t+g.u,0), net = list.reduce((t,g)=>t+g.u,0);
+  const label = k => by==='team' ? `${k} ${tname(k)}` : k;
+  $('paSub').innerHTML = `${MODEL_LBL[mo]}, apostando 1 unidad en cada partido con línea (la tuya o la de DraftKings) antes del partido.${by==='team'?' Cada partido cuenta para los dos equipos.':''}
+    <b>${core.size} de ${list.length}</b> grupos (${Math.round(100*core.size/list.length)}%) generan el 80% de la ganancia (+${fmt(0.8*totPos,1)} de +${fmt(totPos,1)} u.).
+    ${neg.length ? `${neg.length} grupos restan <b style="color:var(--under)">${fmt(totNeg,1)}</b> u.` : ''} Neto: <b>${sgn(net,1)}</b> u. Las barras fuertes son el "20%" que conviene priorizar.`;
+  const items = list.map(g => ({ label: label(g.k), v: g.u, hl: g.u>0 ? core.has(g.k) : undefined, txt: `${sgn(g.u,1)} u · ${g.w}-${g.l} (${g.w+g.l?Math.round(100*g.w/(g.w+g.l)):0}%)` }));
+  $('paChart').innerHTML = hbars(items, { pl: by==='team' ? 150 : 170 });
+}
+function paretoPlayers(){
+  const PL = plFor(S.season);
+  if(!PL){ if(paretoPlayers.tried === S.season){ $('pjChart').innerHTML = '<p class="note">No se pudieron cargar los jugadores.</p>'; $('pjDep').innerHTML = ''; return; }
+    paretoPlayers.tried = S.season; $('pjChart').innerHTML = '<p class="note">Cargando jugadores…</p>';
+    ensurePlayers(S.season).then(()=>{ if(tab==='graficas' && plFor(S.season)) renderCharts(); else paretoPlayers(); }); return; }
+  const both = $('chData').value==='both', seasons = new Set(both ? [Number(S.season), Number(S.season)-1] : [Number(S.season)]);
+  const share = team => { const pts = {}; let tot = 0;
+    for(const x of S.games) if(seasons.has(Number(x.season)) && (norm(x.h.t)===team || norm(x.a.t)===team))
+      for(const o of (PL.byGame[x.id] || []).filter(o => o.team===team)){ const v = o.r[PC.pts]||0; pts[o.r[PC.aid]] = (pts[o.r[PC.aid]]||0) + v; tot += v; }
+    return { tot, list: Object.entries(pts).map(([aid,v]) => ({ aid, v })).sort((x,y)=>y.v-x.v) }; };
+  const T = $('chT1').value || 'DET', sh = share(T);
+  if(!sh.tot){ $('pjSub').textContent = ''; $('pjChart').innerHTML = `<p class="note">Sin datos de ${tname(T)}.</p>`; }
+  else {
+    let cum = 0, k80 = 0; const items = sh.list.filter(x=>x.v>0).map(x => { const before = cum; cum += x.v; const inCore = before < 0.8*sh.tot; if(inCore) k80++;
+      return { label: esc(aName(x.aid)), v: 100*x.v/sh.tot, hl: inCore, txt: `${fmt(100*x.v/sh.tot,1)}% · acum. ${fmt(100*cum/sh.tot,0)}%` }; });
+    $('pjSub').innerHTML = `${tname(T)} (Equipo 1 de arriba) · ${both?'esta y la pasada':'esta temporada'}: <b>${k80} de ${items.length}</b> jugadores (${Math.round(100*k80/items.length)}%) hacen el 80% de los puntos. Barras fuertes = ese núcleo; si falta uno de ellos, el total del equipo es el que más se mueve.`;
+    $('pjChart').innerHTML = hbars(items, { pl: 170, color: () => 'var(--s1)' });
+  }
+  const dep = Object.keys(TEAMS).map(t => { const x = share(t); return { t, v: x.tot ? 100*x.list.slice(0,3).reduce((a,b)=>a+b.v,0)/x.tot : null, top: x.list.slice(0,3) }; }).filter(x=>x.v!=null).sort((x,y)=>y.v-x.v);
+  const avgDep = mean(dep.map(x=>x.v));
+  $('pjDep').innerHTML = hbars(dep.map(x => ({ label: `${x.t} ${tname(x.t)}`, v: x.v, hl: x.v >= avgDep, txt: `${fmt(x.v,0)}% · ${x.top.map(o=>esc(String(aName(o.aid)).split(' ').slice(-1)[0])).join(', ')}` })), { pl: 150, color: x => x.v >= avgDep ? 'var(--s2)' : 'var(--s1)' });
+}
+// Todas las filas antes del partido (línea tuya o DraftKings), sin filtros de Seguimiento
+function preRows(){
+  const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value, l:$('moLine').value };
+  $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = ''; $('moLine').value = 'any';
+  try{ return modelOddsRows(); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; $('sgRange').value = sv.r; $('sgTeam').value = sv.t; $('moLine').value = sv.l; }
+}
+// ---------- 4) Proyección vs. real ----------
+function scatterProj(){
+  const mo = $('scModel').value, rows = preRows().filter(r => r.mo===mo);
+  if(rows.length < 3){ $('scSub').textContent = ''; $('scChart').innerHTML = '<p class="note">Todavía no hay suficientes partidos con línea.</p>'; $('scMiss').innerHTML = ''; return; }
+  const P = rows.map(r=>r.p), A = rows.map(r=>r.act), mp = mean(P), ma = mean(A);
+  const cov = mean(rows.map(r => (r.p-mp)*(r.act-ma))), corr = cov / ((sd(P)||1)*(sd(A)||1));
+  const err = rows.map(r => r.act - r.p), bias = mean(err), mae = mean(err.map(Math.abs)), se = sd(err) || 1;
+  const w = rows.filter(r=>r.res==='W').length, l = rows.filter(r=>r.res==='L').length;
+  const W = 760, H = 380, pl = 48, pr = 20, pt = 14, pb = 36;
+  const all = [...P, ...A]; let lo = Math.min(...all), hi = Math.max(...all); const pad = (hi-lo)*0.06 + 2; lo -= pad; hi += pad;
+  const X = v => pl + (W-pl-pr)*(v-lo)/(hi-lo), Y = v => pt + (H-pt-pb)*(1-(v-lo)/(hi-lo)), tk = niceTicks(lo, hi, 7);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Proyección contra resultado real">`;
+  svg += tk.map(v => `<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${pl-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>
+    <line x1="${X(v)}" x2="${X(v)}" y1="${pt}" y2="${H-pb}" stroke="var(--grid)"/><text x="${X(v)}" y="${H-pb+15}" text-anchor="middle">${v}</text>`).join('');
+  // banda ±1 desviación del error alrededor de la diagonal
+  svg += `<path d="M${X(lo)},${Y(lo+se)} L${X(hi)},${Y(hi+se)} L${X(hi)},${Y(hi-se)} L${X(lo)},${Y(lo-se)} Z" fill="var(--s1)" opacity=".08"/>`;
+  svg += `<line x1="${X(lo)}" y1="${Y(lo)}" x2="${X(hi)}" y2="${Y(hi)}" stroke="var(--muted)" stroke-width="1.5"/>`;
+  svg += `<text x="${X(hi)-6}" y="${Y(hi)+16}" text-anchor="end">real = proyección</text>`;
+  svg += `<text x="${(pl+W-pr)/2}" y="${H-4}" text-anchor="middle">Proyección del modelo</text><text transform="translate(12 ${(pt+H-pb)/2}) rotate(-90)" text-anchor="middle">Total real</text>`;
+  svg += rows.map((r,i) => { const big = Math.abs(r.act - r.p) > 2*se;
+    return `<circle class="sp" data-i="${i}" cx="${X(r.p).toFixed(1)}" cy="${Y(r.act).toFixed(1)}" r="${big?6:4.5}" fill="${r.res==='W'?'var(--over)':r.res==='L'?'var(--under)':'var(--muted)'}" stroke="${big?'var(--ink)':'var(--panel)'}" stroke-width="${big?1.6:1.2}" opacity=".85"/>`; }).join('');
+  svg += `</svg>`;
+  $('scSub').innerHTML = `${MODEL_LBL[mo]} · ${rows.length} partidos. Cada punto es un partido: a la derecha lo que proyectó el modelo, arriba lo que terminó. Sobre la diagonal = terminó más alto que la proyección.
+    Correlación <b>${fmt(corr,2)}</b> (1 = perfecta, 0 = nada) · error promedio <b>${fmt(mae,1)}</b> pts · sesgo <b>${sgn(bias,1)}</b> (${bias<0?'el real queda abajo de la proyección':'el real queda arriba de la proyección'}) · lado vs. línea ${w}-${l}. La franja sombreada es ±${fmt(se,0)} pts; los puntos con borde son los que fallaron por más del doble.`;
+  $('scChart').innerHTML = `<div class="lgd"><span><i style="background:var(--over)"></i>Acertó el lado</span><span><i style="background:var(--under)"></i>Falló el lado</span></div>` + svg;
+  $('scChart').querySelectorAll('.sp').forEach(c => { const r = rows[+c.dataset.i];
+    c.addEventListener('mousemove', e => tipShow(e, `<b>${r.a} @ ${r.h}</b> · ${shortD(r.date)}<br>Proyección ${fmt(r.p)} · línea ${r.line} · real <b>${r.act}</b><br>Modelo dijo ${r.side} → ${r.res==='W'?'✓ acertó':r.res==='L'?'✗ falló':'empate'} · diferencia ${sgn(r.act - r.p,1)}`));
+    c.addEventListener('mouseleave', tipHide); });
+  const miss = rows.filter(r => Math.abs(r.act - r.p) > 2*se).sort((x,y)=>Math.abs(y.act-y.p)-Math.abs(x.act-x.p));
+  $('scMiss').innerHTML = miss.length ? `<p class="note" style="margin-top:8px"><b>Fallas grandes (${miss.length}):</b> ${miss.slice(0,10).map(r => `${shortD(r.date)} ${r.a}@${r.h} proy. ${fmt(r.p,0)} → real ${r.act} (${sgn(r.act-r.p,0)})`).join(' · ')}. Revisa si hubo bajas, tiempo extra o paliza.</p>` : '';
+}
+// ---------- 5) Mapa de calor equipo × semana ----------
+function heatTeamWeek(){
+  const mode = $('hmVal').value, mo = $('scModel').value, f = METRICS[S.metric].f, G = [];
+  if(mode==='proj'){ for(const r of preRows()) if(r.mo===mo) G.push({ date:r.date, h:r.h, a:r.a, v:r.act - r.p }); }
+  else for(const g of seasonGames()){ const k = lineKey(g.id), preH = (S.hist[k] || []).filter(e => e.label==='Pre' && e.line!=null).at(-1);
+    const L = preH ? preH.line : (S.metric==='pts' ? g.mk?.ou : null), a = f(g.h), b = f(g.a); if(L==null || a==null || b==null) continue;
+    G.push({ date:g.date, h:norm(g.h.t), a:norm(g.a.t), v:a + b - Number(L) }); }
+  if(!G.length){ $('hmSub').textContent = ''; $('hmChart').innerHTML = '<p class="note">Sin partidos con línea.</p>'; return; }
+  const wks = [...new Set(G.map(g => weekOf(g.date)))].sort(), cell = {}, tm = {};
+  for(const g of G) for(const t of [g.h, g.a]){ (cell[t+'|'+weekOf(g.date)] ||= []).push(g); (tm[t] ||= []).push(g.v); }
+  const teams = Object.keys(tm).sort((x,y) => mean(tm[y]) - mean(tm[x]));
+  const mx = Math.max(6, ...Object.values(cell).map(L => Math.abs(mean(L.map(g=>g.v)))));
+  const W = Math.max(560, 150 + wks.length*64 + 120), rowH = 22, pl = 150, cw = Math.min(64, (W - pl - 120)/wks.length), H = 24 + teams.length*rowH + 4;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="min-width:${Math.min(W,560)}px" role="img" aria-label="Mapa de calor por equipo y semana">`;
+  svg += wks.map((w,j) => `<text x="${pl + j*cw + cw/2}" y="15" text-anchor="middle">${shortD(w)}</text>`).join('') + `<text x="${pl + wks.length*cw + 12}" y="15">Temporada</text>`;
+  teams.forEach((t,i) => { const y = 22 + i*rowH, tv = tm[t], o = tv.filter(v=>v>0).length, u = tv.filter(v=>v<0).length;
+    svg += `<text x="${pl-8}" y="${y+15}" text-anchor="end" style="fill:var(--ink)">${t} ${tname(t)}</text>`;
+    wks.forEach((w,j) => { const L = cell[t+'|'+w]; if(!L){ svg += `<rect x="${pl+j*cw+1}" y="${y+1}" width="${cw-2}" height="${rowH-2}" rx="3" fill="var(--grid)" opacity=".35"/>`; return; }
+      const v = mean(L.map(g=>g.v)), op = 0.15 + 0.8*Math.min(1, Math.abs(v)/mx);
+      svg += `<rect class="hm" data-k="${t}|${w}" x="${pl+j*cw+1}" y="${y+1}" width="${cw-2}" height="${rowH-2}" rx="3" fill="${v>=0?'var(--over)':'var(--under)'}" opacity="${op.toFixed(2)}"/>
+        <text x="${pl+j*cw+cw/2}" y="${y+15}" text-anchor="middle" style="fill:var(--ink);pointer-events:none;font-size:11px">${sgn(v,0)}</text>`; });
+    svg += `<text x="${pl + wks.length*cw + 12}" y="${y+15}" style="fill:var(--ink)"><tspan font-weight="700" fill="${mean(tv)>=0?'var(--over)':'var(--under)'}">${sgn(mean(tv),1)}</tspan> · ${o}O-${u}U</text>`; });
+  svg += `</svg>`;
+  const what = mode==='proj' ? `total real − proyección de ${MODEL_LBL[mo]} (positivo = el modelo se quedó corto)` : 'total real − línea (la tuya o la de DraftKings)';
+  const hot = teams.filter(t => tm[t].length >= 3), topO = hot.slice(0,3), topU = hot.slice(-3).reverse();
+  $('hmSub').innerHTML = `Promedio por semana del ${what} en los partidos de cada equipo. Rojo/verde fuerte = se alejó mucho. Ordenado de más OVER (arriba) a más UNDER (abajo).
+    ${topO.length ? `Más arriba: <b>${topO.map(t=>`${t} ${sgn(mean(tm[t]),1)}`).join(', ')}</b>. Más abajo: <b>${topU.map(t=>`${t} ${sgn(mean(tm[t]),1)}`).join(', ')}</b>.` : ''}`;
+  $('hmChart').innerHTML = `<div class="lgd"><span><i style="background:var(--over)"></i>Arriba (OVER)</span><span><i style="background:var(--under)"></i>Abajo (UNDER)</span><span><i style="background:var(--grid)"></i>Sin juego</span></div>` + svg;
+  $('hmChart').querySelectorAll('.hm').forEach(r => { const [t, w] = r.dataset.k.split('|'), L = cell[r.dataset.k];
+    r.addEventListener('mousemove', e => tipShow(e, `<b>${tname(t)}</b> · semana del ${shortD(w)}<br>${L.map(g => `${shortD(g.date)} ${g.h===t?'vs '+g.a:'@ '+g.h}: <b>${sgn(g.v,1)}</b>`).join('<br>')}`));
+    r.addEventListener('mouseleave', tipHide); });
+}
+document.querySelectorAll('.chT').forEach((el,i) => el.onchange = () => { store.set('chT'+(i+1), el.value); renderCharts(); });
+$('chData').onchange = renderCharts;
+$('grView').onchange = renderCharts; $('grLine').addEventListener('input', renderCharts);
+for(const id of ['paBy','paModel','scModel','hmVal']) $(id).onchange = renderCharts;
 $('regView').addEventListener('change', renderRegistro);
 
 // ---------- render: picks ----------
@@ -2871,6 +3165,7 @@ function renderAll(){
   if(tab==='hoy') renderCards();
   else if(tab==='equipos') renderEquipos();
   else if(tab==='registro') renderRegistro();
+  else if(tab==='graficas') renderCharts();
   else if(tab==='picks') renderPicks();
   else if(tab==='jugadores') renderJugadores();
   else if(tab==='ranking') renderRanking();
