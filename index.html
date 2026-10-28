@@ -86,6 +86,7 @@ section{display:none} section.on{display:block}
 .abs{font-size:13px;padding:5px 9px;border-radius:8px;border:1px solid;line-height:1.35}
 .abs.out{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.45)}
 .abs.doubt{background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.45)}
+.benchrow td{background:rgba(59,130,246,.06)}
 .abs .rep{display:block;margin-top:3px;color:var(--muted)} .abs .rep b{color:var(--ink)}
 .abs .st{font:800 11.5px "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.6px;margin:0 4px;padding:1px 6px;border-radius:5px;color:#111}
 .abs.out .st{background:#ff4d4d} .abs.doubt .st{background:#ffd23f}
@@ -371,6 +372,19 @@ tr.click{cursor:pointer}
     <h2 style="margin-top:18px;font-size:19px" id="enDetH"></h2>
     <div class="tablewrap"><table id="enDetail"></table></div>
     <p class="note" id="enFoot"></p>
+    <div id="bnWrap" style="display:none">
+      <h2 style="margin-top:22px;font-size:19px" id="bnH">Titulares vs. banca</h2>
+      <div class="row"><div class="ctl"><label for="bnPrev">Partidos</label><select id="bnPrev"><option value="cur">Solo esta temporada</option><option value="both">Esta y la pasada</option></select></div></div>
+      <div class="kpis" id="bnKpis"></div>
+      <h3 style="margin:12px 0 6px;font:700 15px Barlow,sans-serif">Partidos de la temporada <span class="note" style="font-weight:400">· toca uno para ver el box score completo</span></h3>
+      <div class="tablewrap"><table id="bnGames"></table></div>
+      <div id="bnBox"></div>
+      <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Jugadores</h3>
+      <div class="tablewrap"><table id="bnPlayers"></table></div>
+      <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">¿Cuando la banca produce más, el partido se va al OVER?</h3>
+      <div class="tablewrap"><table id="bnTrend"></table></div>
+      <p class="note" id="bnFoot"></p>
+    </div>
   </section>
 
   <section id="s-seguimiento">
@@ -1673,9 +1687,106 @@ function renderEnfrentamientos(){
       <td class="n note">${r.aA}-${r.hA}</td><td class="n">${fmt(r.proj)}</td>
       <td>${r.line!=null && r.proj!==r.line ? `<span class="pill ${r.proj>r.line?'over':'under'}">${r.proj>r.line?'OVER':'UNDER'}</span>` : ''}</td>
       <td>${r.side==null?'<span class="note">—</span>':r.side?'<span class="res-W">✓ Acertó</span>':'<span class="res-L">✗ Falló</span>'}</td></tr>`).join('')}</tbody>` : '';
+  renderBench();
   $('enFoot').innerHTML = `Toca un renglón para ver sus partidos. <b>Real − línea</b>: positivo = esos partidos suelen terminar arriba de la línea (tendencia OVER), negativo = abajo. <b>Error prom.</b>: cuánto se alejó la proyección del resultado real.
     Al inicio de temporada casi todos los cruces llevan 1 partido; agrupa por <b>Equipo</b> para ver más datos.`;
 }
+// ---------- titulares vs. banca de un equipo ----------
+S.bnSort = store.get('bnSort', ['pts', -1]);
+function renderBench(){
+  const T = $('enTeam').value, wrap = $('bnWrap');
+  if(!T){ wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const PL = plFor(S.season);
+  if(!PL){ $('bnGames').innerHTML = '<tr><td class="empty">Cargando jugadores…</td></tr>'; ensurePlayers(S.season).then(()=>{ if(tab==='enfrentamientos') renderBench(); }); return; }
+  const both = $('bnPrev').value==='both', seasons = new Set(both ? [Number(S.season), Number(S.season)-1] : [Number(S.season)]);
+  const f = METRICS[S.metric].f;
+  const G = S.games.filter(x => seasons.has(Number(x.season)) && (norm(x.h.t)===T || norm(x.a.t)===T)).sort((x,y)=>y.date.localeCompare(x.date));
+  const rows = [];
+  for(const x of G){
+    const home = norm(x.h.t)===T, me = home ? x.h : x.a, op = home ? x.a : x.h;
+    const ps = (PL.byGame[x.id] || []).filter(o => o.team===T); if(!ps.length) continue;
+    const sum = (L, k) => L.reduce((t,o)=>t+(pval(o.r,k)||0),0);
+    const st = ps.filter(o => o.r[PC.st]===1), bn = ps.filter(o => o.r[PC.st]!==1);
+    const k = lineKey(x.id), preH = (S.hist[k] || []).filter(e => e.label==='Pre' && e.line!=null).at(-1);
+    const line = S.metric==='pts' ? (preH ? preH.line : x.mk?.ou ?? null) : (preH ? preH.line : null);
+    const tot = f(x.h)!=null && f(x.a)!=null ? f(x.h) + f(x.a) : null;
+    const all = PL.byGame[x.id] || [], effOf = o => SCORE.eff(o.r);
+    const mvp = [...all].filter(o=>o.r[PC.min]>0).sort((a,b)=>effOf(b)-effOf(a))[0];
+    const best = [...ps].filter(o=>o.r[PC.min]>0).sort((a,b)=>effOf(b)-effOf(a))[0];
+    rows.push({ x, date:x.date, opp:norm(op.t), home, line, tot, tp:me.pts, op:op.pts, win: me.pts > op.pts, mvp, best,
+      sP:sum(st,'pts'), sR:sum(st,'reb'), sA:sum(st,'ast'), bP:sum(bn,'pts'), bR:sum(bn,'reb'), bA:sum(bn,'ast'), bM:sum(bn,'min'), bN:bn.filter(o=>o.r[PC.min]>0).length,
+      top: [...bn].sort((a,b)=>(b.r[PC.pts]||0)-(a.r[PC.pts]||0))[0] });
+  }
+  $('bnH').innerHTML = `Titulares vs. banca — ${badge(T)} ${tname(T)}`;
+  if(!rows.length){ $('bnKpis').innerHTML=''; $('bnGames').innerHTML = '<tr><td class="empty">Sin partidos con datos de jugadores.</td></tr>'; $('bnPlayers').innerHTML=''; $('bnTrend').innerHTML=''; $('bnFoot').textContent=''; return; }
+  const avg = k => mean(rows.map(r=>r[k]));
+  $('bnKpis').innerHTML = [
+    ['Partidos', rows.length], ['Pts del equipo', fmt(avg('tp'))], ['Pts titulares', fmt(avg('sP'))],
+    ['Pts banca', `${fmt(avg('bP'))} <span class="note" style="font-size:12px">${Math.round(100*avg('bP')/avg('tp'))}%</span>`],
+    ['Banca REB / AST', `${fmt(avg('bR'))} / ${fmt(avg('bA'))}`], ['Minutos banca', fmt(avg('bM'),0)],
+  ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
+  const pl3 = o => o ? `${esc(aName(o.r[PC.aid]))} <span class="note">${o.r[PC.pts]}/${o.r[PC.reb]}/${o.r[PC.ast]}</span>` : '—';
+  $('bnGames').innerHTML = `<thead><tr><th>Fecha</th><th>Rival</th><th>Res.</th><th class="n">Marcador</th><th class="n">Línea</th><th class="n">Total</th><th>Mejor del equipo <span class="note">P/R/A</span></th><th>MVP del partido</th><th class="n">Tit. PTS/REB/AST</th><th class="n">Banca PTS/REB/AST</th><th class="n">Banca MIN</th><th>Mejor de la banca</th></tr></thead><tbody>${
+    rows.map(r=>`<tr class="click ${S.bnSel===r.x.id?'best':''}" data-gid="${r.x.id}"><td>${r.date}</td><td style="white-space:nowrap">${r.home?'vs':'@'} ${badge(r.opp)}</td>
+      <td><span class="${r.win?'res-W':'res-L'}">${r.win?'G':'P'}</span></td><td class="n">${r.tp}-${r.op}</td>
+      <td class="n">${r.line!=null?fmt(r.line):'—'}</td><td class="n"><b>${r.tot??'—'}</b>${r.line!=null&&r.tot!=null?` <span class="${r.tot>r.line?'res-W':r.tot<r.line?'res-L':''}">${r.tot>r.line?'O':r.tot<r.line?'U':'='}</span>`:''}</td>
+      <td style="white-space:nowrap">${pl3(r.best)}</td>
+      <td style="white-space:nowrap">${r.mvp ? `${r.mvp.team===T?'⭐ ':''}${badge(r.mvp.team)} ${pl3(r.mvp)}` : '—'}</td>
+      <td class="n">${r.sP}/${r.sR}/${r.sA}</td><td class="n"><b>${r.bP}</b>/${r.bR}/${r.bA}</td><td class="n">${fmt(r.bM,0)}</td>
+      <td>${r.top && r.top.r[PC.pts] ? `${esc(aName(r.top.r[PC.aid]))} <span class="note">${r.top.r[PC.pts]} pts · ${fmt(r.top.r[PC.min],0)}'</span>` : '—'}</td></tr>`).join('')}
+    <tr class="sumrow"><td colspan="2">Promedio</td><td>${rows.filter(r=>r.win).length}-${rows.filter(r=>!r.win).length}</td><td class="n">${fmt(avg('tp'))}-${fmt(avg('op'))}</td><td></td><td class="n">${fmt(mean(rows.filter(r=>r.tot!=null).map(r=>r.tot)))}</td><td></td><td></td>
+      <td class="n">${fmt(avg('sP'))}/${fmt(avg('sR'))}/${fmt(avg('sA'))}</td><td class="n">${fmt(avg('bP'))}/${fmt(avg('bR'))}/${fmt(avg('bA'))}</td><td class="n">${fmt(avg('bM'),0)}</td><td></td></tr></tbody>`;
+  // box score del partido seleccionado
+  const sel = rows.find(r => r.x.id===S.bnSel);
+  $('bnBox').innerHTML = sel ? boxScoreHTML(sel.x, PL) : '';
+  // jugadores
+  const P = {};
+  for(const r of rows) for(const o of (PL.byGame[r.x.id] || []).filter(o => o.team===T)){
+    if(!(o.r[PC.min] > 0)) continue;
+    const a = (P[o.r[PC.aid]] ||= { aid:o.r[PC.aid], gp:0, st:0, min:0, pts:0, reb:0, ast:0, tpm:0, bGp:0, bPts:0, bMin:0 });
+    a.gp++; a.min += o.r[PC.min]; a.pts += o.r[PC.pts]||0; a.reb += o.r[PC.reb]||0; a.ast += o.r[PC.ast]||0; a.tpm += o.r[PC.tpm]||0;
+    if(o.r[PC.st]===1) a.st++; else { a.bGp++; a.bPts += o.r[PC.pts]||0; a.bMin += o.r[PC.min]; }
+  }
+  const pl = Object.values(P).map(a => ({ ...a, mpg:a.min/a.gp, ppg:a.pts/a.gp, rpg:a.reb/a.gp, apg:a.ast/a.gp, bppg: a.bGp ? a.bPts/a.bGp : null, ppm: a.min ? 36*a.pts/a.min : null }));
+  const [sk, dir] = S.bnSort;
+  pl.sort((x,y)=> sk==='name' ? dir*aName(x.aid).localeCompare(aName(y.aid)) : dir*((x[sk]??-1e9)-(y[sk]??-1e9)));
+  const cols = [['name','Jugador'],['gp','JJ'],['st','Titular'],['bGp','De cambio'],['mpg','MIN'],['ppg','PTS'],['rpg','REB'],['apg','AST'],['pts','PTS total'],['bppg','PTS saliendo de banca'],['ppm','PTS por 36 min']];
+  const tot = k => pl.reduce((t,a)=>t+a[k],0);
+  $('bnPlayers').innerHTML = `<thead><tr>${cols.map(([k,l])=>`<th data-k="${k}" class="${k==='name'?'':'n'} ${k===sk?'sorted'+(dir>0?' asc':''):''}">${l}</th>`).join('')}</tr></thead><tbody>${
+    pl.map(a=>`<tr class="${a.st < a.gp/2 ? 'benchrow' : ''}"><td>${esc(aName(a.aid))} <span class="note">${esc(aPos(a.aid))}</span>${a.st < a.gp/2 ? ' <span class="pill" style="font-size:11px">BANCA</span>' : ''}</td>
+      <td class="n">${a.gp}</td><td class="n">${a.st}</td><td class="n">${a.bGp}</td><td class="n">${fmt(a.mpg,1)}</td><td class="n"><b>${fmt(a.ppg)}</b></td><td class="n">${fmt(a.rpg)}</td><td class="n">${fmt(a.apg)}</td>
+      <td class="n">${a.pts}</td><td class="n">${a.bppg==null?'—':fmt(a.bppg)}</td><td class="n">${a.ppm==null?'—':fmt(a.ppm)}</td></tr>`).join('')}
+    <tr class="sumrow"><td>Total del equipo</td><td></td><td></td><td></td><td></td><td class="n">${fmt(tot('pts')/rows.length)}</td><td class="n">${fmt(tot('reb')/rows.length)}</td><td class="n">${fmt(tot('ast')/rows.length)}</td><td class="n">${tot('pts')}</td><td></td><td></td></tr></tbody>`;
+  // tendencia: banca arriba / abajo de su mediana
+  const med = median(rows.map(r=>r.bP));
+  const grp = (lbl, R) => { const L = R.filter(r=>r.line!=null && r.tot!=null), o = L.filter(r=>r.tot>r.line).length, u = L.filter(r=>r.tot<r.line).length;
+    return `<tr><td>${lbl}</td><td class="n">${R.length}</td><td class="n">${fmt(mean(R.map(r=>r.bP)))}</td><td class="n">${fmt(mean(R.map(r=>r.tp)))}</td><td class="n"><b>${fmt(mean(R.filter(r=>r.tot!=null).map(r=>r.tot)))}</b></td>
+      <td class="n">${L.length?`${fmt(mean(L.map(r=>r.tot-r.line)))}`:'—'}</td><td class="n">${L.length?`<span style="color:var(--over)">${o} O</span> · <span style="color:var(--under)">${u} U</span> <span class="note">(${Math.round(100*o/L.length)}% O)</span>`:'—'}</td></tr>`; };
+  $('bnTrend').innerHTML = `<thead><tr><th>Partidos donde la banca anotó…</th><th class="n">Partidos</th><th class="n">Pts banca</th><th class="n">Pts equipo</th><th class="n">Total partido</th><th class="n">Real − línea</th><th class="n">Over / Under</th></tr></thead><tbody>
+    ${grp(`Más de ${fmt(med,0)} (arriba de lo normal)`, rows.filter(r=>r.bP > med))}${grp(`${fmt(med,0)} o menos`, rows.filter(r=>r.bP <= med))}</tbody>`;
+  $('bnFoot').innerHTML = `Titulares y banca según quién empezó cada partido (box score de ESPN). <b>PTS saliendo de banca</b>: su promedio solo en los partidos que entró de cambio. <b>PTS por 36 min</b>: lo que produce si jugara 36 minutos (sirve para ver quién aprovecha sus minutos).
+    La tendencia compara los partidos donde la banca anotó más que su mediana contra los demás; la línea es la tuya o la de DraftKings (solo en puntos). Con pocos partidos es solo una pista: elige "Esta y la pasada" para ver más.`;
+}
+$('bnPrev').onchange = renderBench;
+$('bnGames').addEventListener('click', e => { const tr = e.target.closest('tr[data-gid]'); if(!tr) return; S.bnSel = S.bnSel===tr.dataset.gid ? null : tr.dataset.gid; renderBench(); });
+function boxScoreHTML(x, PL){
+  const all = (PL.byGame[x.id] || []).filter(o => o.r[PC.min] > 0), effOf = o => SCORE.eff(o.r);
+  const mvp = [...all].sort((a,b)=>effOf(b)-effOf(a))[0];
+  const team = (t, side) => { const L = all.filter(o => o.team===norm(t.t)).sort((a,b)=> (b.r[PC.st]-a.r[PC.st]) || (b.r[PC.min]-a.r[PC.min]));
+    const sum = k => L.reduce((s,o)=>s+(o.r[PC[k]]||0),0);
+    return `<div class="lu-team">${badge(norm(t.t))} ${tname(norm(t.t))} <span class="note">${side} · ${t.pts} pts</span></div>
+      <div style="overflow-x:auto"><table><thead><tr><th></th><th>Jugador</th><th class="n">MIN</th><th class="n">PTS</th><th class="n">REB</th><th class="n">AST</th><th class="n">3PM</th><th class="n">TC</th><th class="n">TL</th><th class="n">ROB</th><th class="n">BLQ</th><th class="n">PÉR</th><th class="n">+/-</th><th class="n">EFF</th></tr></thead><tbody>
+      ${L.map(o=>`<tr class="${o===mvp?'best':''}"><td>${o.r[PC.st]===1?'<span class="st">T</span>':''}</td><td>${esc(aName(o.r[PC.aid]))} <span class="note">${esc(aPos(o.r[PC.aid]))}</span>${o===mvp?' <span class="pill over" style="font-size:11px">MVP</span>':''}</td>
+        <td class="n">${fmt(o.r[PC.min],0)}</td><td class="n"><b>${o.r[PC.pts]}</b></td><td class="n">${o.r[PC.reb]}</td><td class="n">${o.r[PC.ast]}</td><td class="n">${o.r[PC.tpm]??'—'}</td>
+        <td class="n">${o.r[PC.fgm]??'—'}-${o.r[PC.fga]??'—'}</td><td class="n">${o.r[PC.ftm]??'—'}-${o.r[PC.fta]??'—'}</td><td class="n">${o.r[PC.stl]}</td><td class="n">${o.r[PC.blk]}</td><td class="n">${o.r[PC.to]}</td>
+        <td class="n">${o.r[PC.pm]>0?'+':''}${o.r[PC.pm]??''}</td><td class="n">${fmt(effOf(o),0)}</td></tr>`).join('')}
+      <tr class="sumrow"><td></td><td>Titulares ${L.filter(o=>o.r[PC.st]===1).reduce((s,o)=>s+o.r[PC.pts],0)} · Banca ${L.filter(o=>o.r[PC.st]!==1).reduce((s,o)=>s+o.r[PC.pts],0)}</td><td class="n">${fmt(sum('min'),0)}</td><td class="n">${sum('pts')}</td><td class="n">${sum('reb')}</td><td class="n">${sum('ast')}</td><td class="n">${sum('tpm')}</td><td class="n">${sum('fgm')}-${sum('fga')}</td><td class="n">${sum('ftm')}-${sum('fta')}</td><td class="n">${sum('stl')}</td><td class="n">${sum('blk')}</td><td class="n">${sum('to')}</td><td></td><td></td></tr></tbody></table></div>`; };
+  return `<div class="pl-card lu" style="margin-top:10px"><h3 style="margin:0 0 6px">${x.date} · ${badge(norm(x.a.t))} ${x.a.pts} @ ${badge(norm(x.h.t))} ${x.h.pts}</h3>
+    ${team(x.a,'visita')}${team(x.h,'local')}<p class="note">T = titular · TC = tiros de campo · TL = tiros libres · PÉR = pérdidas · EFF = eficiencia NBA (PTS+REB+AST+ROB+BLQ − tiros fallados − pérdidas). MVP = mayor EFF del partido.</p></div>`;
+}
+$('bnPlayers').addEventListener('click', e => { const k = e.target.closest('th')?.dataset.k; if(!k) return;
+  S.bnSort = S.bnSort[0]===k ? [k, -S.bnSort[1]] : [k, k==='name'?1:-1]; store.set('bnSort', S.bnSort); renderBench(); });
 for(const id of ['enGroup','enModel','enTeam']) $(id).onchange = () => { S.enSel = null; renderEnfrentamientos(); };
 $('enMin').onchange = () => renderEnfrentamientos();
 $('enTable').addEventListener('click', e => {
