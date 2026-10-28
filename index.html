@@ -425,6 +425,10 @@ tr.click{cursor:pointer}
       <div class="ctl"><label for="cbInv">Apostar</label><select id="cbInv"><option value="fav">A favor (lo que dicen)</option><option value="both">A favor y en contra</option><option value="inv">Solo en contra (inversa)</option></select></div>
       <div class="ctl"><label for="cbFrom">Contar desde</label><input type="date" id="cbFrom"></div>
       <div class="ctl"><label for="cbFind">Buscar</label><input type="text" id="cbFind" placeholder="ej. Mixto + Historial" style="width:170px"></div></div>
+    <h3 style="margin:10px 0 6px;font:700 15px Barlow,sans-serif">Consenso: cuando todos los modelos dicen lo mismo</h3>
+    <div class="tablewrap"><table id="csTable"></table></div>
+    <div class="tablewrap" style="margin-top:8px"><table id="csList"></table></div>
+    <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Todas las combinaciones</h3>
     <div class="tablewrap"><table id="cbTable"></table></div>
     <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Qué tanto coinciden entre sí</h3>
     <div class="tablewrap"><table id="cbMatrix"></table></div>
@@ -2079,6 +2083,29 @@ function renderCombos(){
     base.map(c=>`<tr class="${c===best?'best':''}"><td>${c.inv?'<span class="pill warn" style="font-size:11px">EN CONTRA</span> ':''}${c.ks.map(k=>SIG_LBL[k]).join(' + ')}</td><td class="n">${c.ks.length}</td><td class="n">${c.n}</td><td class="n">${c.w}-${c.l}${c.p?'-'+c.p:''}</td>
       <td class="n"><b>${(100*c.acc).toFixed(1)}%</b></td><td class="n" style="${col(c.u)}">${sgn(c.u,2)}</td><td class="n">${c.w+c.l?(100*c.u/(c.w+c.l+c.p)).toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody>`
     : `<tr><td class="empty">Todavía no hay suficientes partidos con línea (mínimo ${minN} por combinación).</td></tr>`;
+  // consenso
+  const M4 = ['pace','avg','mix','players'];
+  const csRow = (lbl, R, strong) => { let w=0,l=0,p=0,u=0; for(const x of R){ if(x.g.res==='P'){ p++; continue; } const dec = x.g.dec.pace || 1.909; if(x.side===x.g.res){ w++; u += dec-1; } else { l++; u -= 1; } }
+    return `<tr class="${strong?'sumrow':''}"><td>${lbl}</td><td class="n">${R.length}</td><td class="n">${w}-${l}${p?'-'+p:''}</td><td class="n"><b>${w+l?(100*w/(w+l)).toFixed(1)+'%':'—'}</b></td><td class="n" style="${col(u)}">${R.length?sgn(u,2):'—'}</td><td class="n">${R.length?(100*u/R.length).toFixed(1)+'%':'—'}</td></tr>`; };
+  const cons = [];
+  for(const g of games){
+    const ss = M4.map(k => g.sides[k]); if(ss.some(x=>!x)) continue;
+    const o = ss.filter(x=>x==='OVER').length, side = o>=2 ? (o===2 ? null : 'OVER') : 'UNDER', agree = Math.max(o, 4-o);
+    cons.push({ g, o, agree, side, all5: agree===4 && g.sides.hist===(o===4?'OVER':'UNDER'), pace: g.sides.pace });
+  }
+  const c4 = cons.filter(c => c.agree===4), c3 = cons.filter(c => c.agree===3), c2 = cons.filter(c => c.agree===2);
+  $('csTable').innerHTML = `<thead><tr><th>Situación</th><th class="n">Partidos</th><th class="n">Récord</th><th class="n">% acierto</th><th class="n">Unidades</th><th class="n">ROI</th></tr></thead><tbody>
+    ${csRow('Los 4 modelos dicen <b>OVER</b>', c4.filter(c=>c.o===4).map(c=>({g:c.g, side:'OVER'})))}
+    ${csRow('Los 4 modelos dicen <b>UNDER</b>', c4.filter(c=>c.o===0).map(c=>({g:c.g, side:'UNDER'})))}
+    ${csRow('<b>Los 4 de acuerdo</b> (OVER o UNDER)', c4.map(c=>({g:c.g, side:c.side})), true)}
+    ${csRow('…y el Historial también (los 5)', c4.filter(c=>c.all5).map(c=>({g:c.g, side:c.side})))}
+    ${csRow('3 de 4 de acuerdo (lado de la mayoría)', c3.map(c=>({g:c.g, side:c.side})))}
+    ${csRow('Divididos 2 y 2 (lado de Ritmo)', c2.map(c=>({g:c.g, side:c.pace})))}
+    ${csRow('Referencia: Ritmo en todos los partidos', cons.map(c=>({g:c.g, side:c.pace})))}</tbody>`;
+  $('csList').innerHTML = c4.length ? `<thead><tr><th>Partidos con los 4 de acuerdo</th><th>Fecha</th><th>Señal</th><th class="n">Línea</th><th class="n">Real</th><th>Historial</th><th></th></tr></thead><tbody>${
+    [...c4].sort((x,y)=>y.g.date.localeCompare(x.g.date)).map(c=>`<tr><td style="white-space:nowrap">${badge(c.g.a)} @ ${badge(c.g.h)}</td><td>${c.g.date}</td><td><span class="pill ${c.side==='OVER'?'over':'under'}">${c.side}</span></td>
+      <td class="n">${fmt(c.g.line)}</td><td class="n"><b>${c.g.act}</b></td><td>${c.g.sides.hist ? (c.g.sides.hist===c.side ? '✓ coincide' : '✗ contrario') : '<span class="note">—</span>'}</td>
+      <td>${c.g.res==='P'?'Push':c.side===c.g.res?'<span class="res-W">✓ Acertó</span>':'<span class="res-L">✗ Falló</span>'}</td></tr>`).join('')}</tbody>` : '';
   // matriz de coincidencia
   const pair = (a,b) => { let n=0, same=0; for(const g of games){ if(!g.sides[a] || !g.sides[b]) continue; n++; if(g.sides[a]===g.sides[b]) same++; } return n ? same/n : null; };
   $('cbMatrix').innerHTML = `<thead><tr><th></th>${keys.map(k=>`<th class="n">${SIG_LBL[k]}</th>`).join('')}</tr></thead><tbody>${
