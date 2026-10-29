@@ -1255,8 +1255,40 @@ function valueHTML(E, key){
     ${vig!=null?`<span class="note">comisión de la casa ${(vig*100).toFixed(1)}%</span>`:''}
   </div>`;
 }
+// ---------- Regresión lineal: se grafica siempre; el ajuste en tarjetas sólo con suficientes partidos ----------
+const REG_MIN = 200, REG_WF_MIN = 30;
+function linfit(x, y){ const n = x.length, mx = mean(x), my = mean(y); let sxy = 0, sxx = 0, syy = 0;
+  for(let i=0;i<n;i++){ sxy += (x[i]-mx)*(y[i]-my); sxx += (x[i]-mx)**2; syy += (y[i]-my)**2; }
+  const b = sxx ? sxy/sxx : 0, a = my - b*mx; return { a, b, r2: sxx && syy ? (sxy*sxy)/(sxx*syy) : 0, n }; }
+// rows: filas de modelOddsRows de un modelo. Ajuste para apostar: (real − línea) = a + b·(proyección − línea)
+function regFit(rows){
+  const R = rows.filter(r => r.p!=null && r.act!=null && r.line!=null).sort((x,y)=>x.date.localeCompare(y.date));
+  if(R.length < 5) return null;
+  const e = linfit(R.map(r=>r.p - r.line), R.map(r=>r.act - r.line)), t = linfit(R.map(r=>r.p), R.map(r=>r.act));
+  // prueba sin trampa: cada partido se corrige sólo con partidos de fechas anteriores
+  const raw = [0,0], adj = [0,0];
+  for(let i=0;i<R.length;i++){ const past = R.filter(r => r.date < R[i].date); if(past.length < REG_WF_MIN) continue;
+    const f = linfit(past.map(r=>r.p - r.line), past.map(r=>r.act - r.line)), r = R[i], res = r.act - r.line; if(!res) continue;
+    const e0 = r.p - r.line, e1 = f.a + f.b*e0;
+    if(e0) raw[(e0 > 0) === (res > 0) ? 0 : 1]++;
+    if(e1) adj[(e1 > 0) === (res > 0) ? 0 : 1]++; }
+  const pct = x => x[0]+x[1] ? x[0]/(x[0]+x[1]) : 0;
+  return { n:R.length, a:e.a, b:e.b, r2:e.r2, ta:t.a, tb:t.b, tr2:t.r2, raw, adj, helps: raw[0]+raw[1] > 0 && pct(adj) >= pct(raw) };
+}
+const regKey = mo => `reg.${S.season}.${S.metric}.${mo}`;
+const regGet = mo => store.get(regKey(mo), null);
+const regActive = f => !!f && f.n >= REG_MIN && f.helps;
+// Línea en la tarjeta cuando el ajuste está activo para el modelo elegido
+function regHTML(E, line){
+  const f = regGet(S.model); if(!regActive(f) || E.proj==null || line==='' || line==null || E.el!=null) return '';
+  const L = Number(line), ed = f.a + f.b*(E.proj - L), side = ed > 0 ? 'OVER' : 'UNDER', flip = E.sug && side !== E.sug;
+  return `<div class="meta"><span>Regresión (${f.n} partidos): esperado <b>${fmt(L + ed)}</b> → <b style="color:var(--${side==='OVER'?'over':'under'})">${side} ${sgn(ed,1)}</b>
+    ${flip ? ' <b style="color:var(--under)">⚠ contradice al modelo</b>' : Math.abs(ed) < 1 ? ' <span class="note">(ventaja muy chica)</span>' : ''}</span></div>`;
+}
 function stakeNote(E, od){
   if(E.el!=null || E.proj==null || E.diff==null || !E.diff) return '';   // solo antes del partido
+  { const f = regGet(S.model); if(regActive(f)){ const ed = f.a + f.b*E.diff;
+    if((ed > 0 ? 'OVER' : 'UNDER') !== E.sug || Math.abs(ed) < 1) return `<span class="stake none">No apostar <span class="note">(la regresión con ${f.n} partidos deja la ventaja en ${sgn(ed,1)})</span></span>`; } }
   const side = E.sug, real = oddsDec(side==='OVER' ? od.o : od.u), dec = real || 1.909;   // sin momio de ese lado: se supone −110
   let st; try{ st = stakeFor(Math.abs(E.diff), dec); } catch { return ''; }
   if(!st) return '';
@@ -1424,6 +1456,7 @@ function renderCardsInner(){
         </div>
       </div>
       ${E.sug ? valueHTML(E, key) : ''}
+      ${E.sug && (g.state==='pre' || g.state==='manual') ? regHTML(E, line) : ''}
       ${E.sug && (g.state==='pre' || g.state==='manual') ? `<div class="meta">${stakeNote(E, S.odds[key] || {})}</div>` : ''}
       ${E.sug ? `<div class="meta">
         <span>Prob. over aprox <b>${E.pOver!=null?Math.round(E.pOver*100)+'%':'—'}</b></span>
@@ -2520,7 +2553,9 @@ function preRows(){
 }
 // ---------- 4) Proyección vs. real ----------
 function scatterProj(){
-  const mo = $('scModel').value, rows = preRows().filter(r => r.mo===mo);
+  const mo = $('scModel').value, allR = preRows(), rows = allR.filter(r => r.mo===mo);
+  for(const m of ['pace','avg','mix','players']){ const f = regFit(allR.filter(r => r.mo===m)); if(f) store.set(regKey(m), f); }
+  const fit = regGet(mo);
   if(rows.length < 3){ $('scSub').textContent = ''; $('scChart').innerHTML = '<p class="note">Todavía no hay suficientes partidos con línea.</p>'; $('scMiss').innerHTML = ''; return; }
   const P = rows.map(r=>r.p), A = rows.map(r=>r.act), mp = mean(P), ma = mean(A);
   const cov = mean(rows.map(r => (r.p-mp)*(r.act-ma))), corr = cov / ((sd(P)||1)*(sd(A)||1));
@@ -2537,12 +2572,20 @@ function scatterProj(){
   svg += `<line x1="${X(lo)}" y1="${Y(lo)}" x2="${X(hi)}" y2="${Y(hi)}" stroke="var(--muted)" stroke-width="1.5"/>`;
   svg += `<text x="${X(hi)-6}" y="${Y(hi)+16}" text-anchor="end">real = proyección</text>`;
   svg += `<text x="${(pl+W-pr)/2}" y="${H-4}" text-anchor="middle">Proyección del modelo</text><text transform="translate(12 ${(pt+H-pb)/2}) rotate(-90)" text-anchor="middle">Total real</text>`;
+  if(fit){ const x0 = Math.min(...P), x1 = Math.max(...P);
+    svg += `<line x1="${X(x0)}" y1="${Y(fit.ta + fit.tb*x0)}" x2="${X(x1)}" y2="${Y(fit.ta + fit.tb*x1)}" stroke="var(--s2)" stroke-width="2.5" stroke-dasharray="7 5"/>`; }
   svg += rows.map((r,i) => { const big = Math.abs(r.act - r.p) > 2*se;
     return `<circle class="sp" data-i="${i}" cx="${X(r.p).toFixed(1)}" cy="${Y(r.act).toFixed(1)}" r="${big?6:4.5}" fill="${r.res==='W'?'var(--over)':r.res==='L'?'var(--under)':'var(--muted)'}" stroke="${big?'var(--ink)':'var(--panel)'}" stroke-width="${big?1.6:1.2}" opacity=".85"/>`; }).join('');
   svg += `</svg>`;
   $('scSub').innerHTML = `${MODEL_LBL[mo]} · ${rows.length} partidos. Cada punto es un partido: a la derecha lo que proyectó el modelo, arriba lo que terminó. Sobre la diagonal = terminó más alto que la proyección.
     Correlación <b>${fmt(corr,2)}</b> (1 = perfecta, 0 = nada) · error promedio <b>${fmt(mae,1)}</b> pts · sesgo <b>${sgn(bias,1)}</b> (${bias<0?'el real queda abajo de la proyección':'el real queda arriba de la proyección'}) · lado vs. línea ${w}-${l}. La franja sombreada es ±${fmt(se,0)} pts; los puntos con borde son los que fallaron por más del doble.`;
-  $('scChart').innerHTML = `<div class="lgd"><span><i style="background:var(--over)"></i>Acertó el lado</span><span><i style="background:var(--under)"></i>Falló el lado</span></div>` + svg;
+  if(fit){ const pc = x => x[0]+x[1] ? Math.round(100*x[0]/(x[0]+x[1]))+'%' : '—', test = `prueba con partidos anteriores: sin ajuste ${fit.raw[0]}-${fit.raw[1]} (${pc(fit.raw)}), con ajuste ${fit.adj[0]}-${fit.adj[1]} (${pc(fit.adj)})`;
+    const st = fit.n < REG_MIN ? `<b>⏳ Ajuste en espera:</b> ${fit.n} de ${REG_MIN} partidos (${Math.round(100*fit.n/REG_MIN)}%). Mientras, las tarjetas usan la proyección normal.`
+      : fit.helps ? `<b style="color:var(--over)">✓ Ajuste activo en las tarjetas</b> (${fit.n} partidos).` : `<b>Ajuste no aplicado:</b> ya hay ${fit.n} partidos pero corregir no mejora el acierto.`;
+    $('scSub').innerHTML += `<br><b>Recta de regresión</b> (punteada): real = ${fmt(fit.ta,0)} + ${fmt(fit.tb,2)} × proyección · R² ${Math.round(100*fit.tr2)}%.
+      Para apostar: de cada punto de ventaja se cumplen <b>${fmt(fit.b,2)}</b> y el sesgo es <b>${sgn(fit.a,1)}</b> (${fit.b < 0.7 ? 'el modelo exagera la ventaja' : fit.b > 1.3 ? 'el modelo se queda corto' : 'ventaja bien medida'}).
+      <br>${st} <span class="note">${test}.</span>`; }
+  $('scChart').innerHTML = `<div class="lgd"><span><i style="background:var(--over)"></i>Acertó el lado</span><span><i style="background:var(--under)"></i>Falló el lado</span>${fit?'<span><i style="background:var(--s2)"></i>Recta de regresión</span>':''}</div>` + svg;
   $('scChart').querySelectorAll('.sp').forEach(c => { const r = rows[+c.dataset.i];
     c.addEventListener('mousemove', e => tipShow(e, `<b>${r.a} @ ${r.h}</b> · ${shortD(r.date)}<br>Proyección ${fmt(r.p)} · línea ${r.line} · real <b>${r.act}</b><br>Modelo dijo ${r.side} → ${r.res==='W'?'✓ acertó':r.res==='L'?'✗ falló':'empate'} · diferencia ${sgn(r.act - r.p,1)}`));
     c.addEventListener('mouseleave', tipHide); });
