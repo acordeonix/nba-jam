@@ -382,6 +382,10 @@ tr.click{cursor:pointer}
       <button id="expCsv">Exportar CSV</button><button id="expJson">Exportar respaldo</button>
       <label class="note" style="display:flex;gap:6px;align-items:center"><button id="impBtn" type="button">Importar respaldo</button><input type="file" id="impFile" accept=".json" hidden></label>
     </div>
+    <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Acierto por semana <span class="note" style="font-weight:400">· semanas de lunes a domingo</span></h3>
+    <p class="note" id="pickWeekSub"></p>
+    <div class="tablewrap"><table id="pickWeek"></table></div>
+    <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Todos mis picks</h3>
     <div class="tablewrap"><table id="pickTable"></table></div>
   </section>
 
@@ -448,6 +452,9 @@ tr.click{cursor:pointer}
       <div class="ctl"><label for="moModel">Modelo</label><select id="moModel"><option value="">Todos</option><option value="avg">Promedios</option><option value="mix">Mixto</option><option value="players">Jugadores</option><option value="pace">Ritmo × eficiencia</option><option value="h2h">Historial directo</option></select></div>
     </div>
     <div class="tablewrap"><table id="moTable"></table></div>
+    <h3 style="margin:14px 0 6px;font:700 15px Barlow,sans-serif">Acierto por semana <span class="note" style="font-weight:400">· lunes a domingo, con los mismos filtros</span></h3>
+    <p class="note" id="moWeekSub"></p>
+    <div class="tablewrap"><table id="moWeek"></table></div>
     <div class="tablewrap" style="margin-top:10px"><table id="moDetail"></table></div>
     <p class="note" id="moFoot"></p>
     <h2 style="margin-top:18px;font-size:19px">Acierto según la ventaja y % del bank</h2>
@@ -565,6 +572,8 @@ const METRICS = {
 };
 
 // ---------- storage (try/catch, puede fallar en modo privado) ----------
+const weekOf = d => { const x = new Date(d+'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay()+6)%7)); return x.toISOString().slice(0,10); };
+const shortD = d => new Date(d+'T12:00:00Z').toLocaleDateString('es-MX',{ day:'numeric', month:'short', timeZone:'UTC' }).replace('.','');
 const store = {
   get(k, d){ try{ const v = localStorage.getItem('nbajam.'+k); return v==null?d:JSON.parse(v);}catch{return d;} },
   set(k, v){ try{ localStorage.setItem('nbajam.'+k, JSON.stringify(v)); }catch{} },
@@ -2195,6 +2204,21 @@ for(const id of ['cbMin','cbSize','cbInv']) $(id).onchange = renderCombos;
 $('cbFrom').onchange = e => { store.set('cbFrom', e.target.value); renderCombos(); };
 $('cbFind').oninput = renderCombos;
 
+function renderModelWeeks(rows, mine, models){
+  const cols = [...models.filter(m => m!=='h2h').map(m => ({ k:m, lbl:MODEL_LBL[m].split(' (')[0], W:weekStats(rows.filter(r=>r.mo===m)) })), { k:'mine', lbl:'Tus picks', W:weekStats(mine) }];
+  const weeks = [...new Set(cols.flatMap(c => c.W.map(w=>w.w)))].sort().reverse();
+  if(!weeks.length){ $('moWeekSub').textContent = ''; $('moWeek').innerHTML = ''; return; }
+  for(const c of cols){ c.by = Object.fromEntries(c.W.map(w=>[w.w,w])); Object.assign(c, weekRank(c.W)); }
+  const now = weekNow();
+  const mark = (c, w) => c.best?.w===w ? ' <span title="Mejor semana">▲</span>' : c.worst?.w===w ? ' <span title="Peor semana">▼</span>' : '';
+  const sumRow = (lbl, key) => `<tr class="sumrow"><td>${lbl}</td>${cols.map(c => c[key] ? `<td class="n">${weekLbl(c[key].w)}<br><b>${Math.round(100*c[key].pct)}%</b> <span class="note">${c[key].W}-${c[key].L}</span></td>` : '<td class="n note">—</td>').join('')}</tr>`;
+  const stab = c => { const P = c.W.filter(w => w.W + w.L >= WK_MIN); return P.length ? `${P.filter(w=>w.pct>=0.524).length}/${P.length}` : '—'; };
+  $('moWeek').innerHTML = `<thead><tr><th>Semana</th>${cols.map(c=>`<th class="n">${c.lbl}</th>`).join('')}</tr></thead><tbody>${
+    weeks.map(w => `<tr><td style="white-space:nowrap">${weekLbl(w)}${w===now?' <span class="note">(en curso)</span>':''}</td>${cols.map(c => pctCell(c.by[w], mark(c, w))).join('')}</tr>`).join('')}
+    ${sumRow('▲ Mejor semana','best')}${sumRow('▼ Peor semana','worst')}
+    <tr class="sumrow"><td>Semanas arriba de 52.4%</td>${cols.map(c=>`<td class="n">${stab(c)}</td>`).join('')}</tr></tbody>`;
+  $('moWeekSub').innerHTML = `% de acierto de cada modelo (y tus picks reales) en cada semana; verde = arriba de 52.4% (le gana a −110), rojo = abajo. ▲/▼ marcan la mejor y la peor semana de cada columna (mínimo ${WK_MIN} picks decididos). Un modelo que se mantiene verde casi todas las semanas es más confiable que uno con una sola semana muy buena.`;
+}
 function renderModelOdds(){
   const rows = modelOddsRows(), selM = $('moModel').value;
   const pct = (a,b) => b ? (100*a/b).toFixed(1)+'%' : '—';
@@ -2217,6 +2241,7 @@ function renderModelOdds(){
       <td class="n"><b>${pct(mine.filter(r=>r.res==='W').length, mine.filter(r=>r.res==='W'||r.res==='L').length)}</b></td>
       <td class="n" style="${col(mine.reduce((t,r)=>t+(r.units||0),0))}">${mine.some(r=>r.units!=null)?sgn(mine.reduce((t,r)=>t+(r.units||0),0),2):'—'}</td>
       <td class="n">${mine.some(r=>r.units!=null)?(100*mine.reduce((t,r)=>t+(r.units||0),0)/mine.filter(r=>r.units!=null).length).toFixed(1)+'%':'—'}</td><td class="n">—</td></tr></tbody>`;
+  renderModelWeeks(rows, mine, models);
   const det = selM || S.moSel;
   const D = det ? rows.filter(r=>r.mo===det).sort((x,y)=>y.date.localeCompare(x.date)) : [];
   if(!det){ $('moDetail').innerHTML = allModelsTable(rows); }
@@ -2368,8 +2393,6 @@ function renderRegistro(){
 $('regLine').addEventListener('input', renderRegistro);
 // ---------- gráficas del registro ----------
 const CH_COL = ['var(--s1)','var(--s2)','var(--s3)'];
-const weekOf = d => { const x = new Date(d+'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - ((x.getUTCDay()+6)%7)); return x.toISOString().slice(0,10); };
-const shortD = d => new Date(d+'T12:00:00Z').toLocaleDateString('es-MX',{ day:'numeric', month:'short', timeZone:'UTC' }).replace('.','');
 let chTip = null;
 function tipShow(e, html){ if(!chTip){ chTip = document.createElement('div'); chTip.className = 'chtip'; document.body.appendChild(chTip); }
   chTip.innerHTML = html; chTip.style.display = 'block'; const w = chTip.offsetWidth; chTip.style.left = Math.min(innerWidth - w - 8, e.clientX + 12) + 'px'; chTip.style.top = (e.clientY + 14) + 'px'; }
@@ -2644,6 +2667,39 @@ function gradePick(p){
   const money = units!=null && p.stake ? units * p.stake : null;
   return { tot, res, units, money };
 }
+// ---------- acierto por semana (lunes a domingo) ----------
+const WK_MIN = 3;   // mínimo de picks decididos para entrar al ranking de mejor/peor semana
+function weekStats(items){
+  const by = {};
+  for(const r of items){ if(!r.res || !r.date) continue; const k = weekOf(r.date), w = (by[k] ||= { w:k, W:0, L:0, P:0, u:0, nu:0, m:0, nm:0 });
+    if(r.res==='W') w.W++; else if(r.res==='L') w.L++; else w.P++;
+    if(r.units!=null){ w.u += r.units; w.nu++; } if(r.money!=null){ w.m += r.money; w.nm++; } }
+  for(const w of Object.values(by)) w.pct = w.W + w.L ? w.W/(w.W + w.L) : null;
+  return Object.values(by).sort((a,b)=>b.w.localeCompare(a.w));
+}
+function weekRank(W){
+  const R = W.filter(w => w.W + w.L >= WK_MIN);
+  const best = [...R].sort((a,b)=>b.pct-a.pct || b.u-a.u)[0] || null, worst = [...R].sort((a,b)=>a.pct-b.pct || a.u-b.u)[0] || null;
+  return { best, worst: worst && best && worst.w===best.w ? null : worst };
+}
+const weekLbl = k => { const e = new Date(k+'T12:00:00Z'); e.setUTCDate(e.getUTCDate()+6); return `${shortD(k)} – ${shortD(e.toISOString().slice(0,10))}`; };
+const weekNow = () => weekOf(new Date(Date.now() - 8*3600e3).toISOString().slice(0,10));
+const pctCell = (w, extra='') => { if(!w || w.W + w.L + w.P === 0) return `<td class="n note">—</td>`;
+  const p = w.pct, bg = p==null ? '' : `background:color-mix(in srgb, var(--${p>=0.524?'over':'under'}) ${Math.round(12 + 40*Math.min(1, Math.abs(p-0.524)/0.3))}%, transparent)`;
+  return `<td class="n" style="${bg}"><b>${p==null?'—':Math.round(100*p)+'%'}</b> <span class="note">${w.W}-${w.L}${w.P?'-'+w.P:''}</span>${extra}</td>`; };
+function renderPickWeeks(rows){
+  const W = weekStats(rows), { best, worst } = weekRank(W), now = weekNow(), hasM = W.some(w=>w.nm);
+  if(!W.length){ $('pickWeekSub').textContent = ''; $('pickWeek').innerHTML = '<tr><td class="empty">Aún no hay picks calificados.</td></tr>'; return; }
+  const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
+  const tag = w => (best && w.w===best.w ? ' <span class="pill over">Mejor</span>' : '') + (worst && w.w===worst.w ? ' <span class="pill under">Peor</span>' : '') + (w.w===now ? ' <span class="note">(en curso)</span>' : '');
+  const win = W.filter(w => w.pct!=null), pos = win.filter(w => w.pct >= 0.524).length;
+  $('pickWeekSub').innerHTML = `${best ? `Mejor semana: <b>${weekLbl(best.w)}</b> con <b>${Math.round(100*best.pct)}%</b> (${best.W}-${best.L}${best.nu?`, ${sgn(best.u,2)} u.`:''}${best.nm?`, ${money(best.m,true)}`:''}).` : ''}
+    ${worst ? ` Peor: <b>${weekLbl(worst.w)}</b> con <b>${Math.round(100*worst.pct)}%</b> (${worst.W}-${worst.L}${worst.nu?`, ${sgn(worst.u,2)} u.`:''}${worst.nm?`, ${money(worst.m,true)}`:''}).` : ''}
+    ${win.length ? ` ${pos} de ${win.length} semanas arriba de 52.4% (lo que pide un momio de −110).` : ''} Para mejor/peor cuentan las semanas con al menos ${WK_MIN} picks decididos.`;
+  $('pickWeek').innerHTML = `<thead><tr><th>Semana</th><th class="n">Picks</th><th class="n">% acierto</th><th class="n">Unidades</th>${hasM?'<th class="n">Ganancia</th>':''}</tr></thead><tbody>${
+    W.map(w => `<tr><td style="white-space:nowrap">${weekLbl(w.w)}${tag(w)}</td><td class="n">${w.W+w.L+w.P}</td>${pctCell(w)}
+      <td class="n" style="${col(w.u)}">${w.nu?sgn(w.u,2):'—'}</td>${hasM?`<td class="n" style="${col(w.m)}">${w.nm?money(w.m,true):'—'}</td>`:''}</tr>`).join('')}</tbody>`;
+}
 function renderPicks(){
   const rows = [...S.picks].sort((x,y)=>(y.date||'').localeCompare(x.date||'')).map(p=>({...p, ...gradePick(p)}));
   const W = rows.filter(r=>r.res==='W').length, Lo = rows.filter(r=>r.res==='L').length, Pu = rows.filter(r=>r.res==='P').length;
@@ -2662,6 +2718,7 @@ function renderPicks(){
       return [['Ganancia', `<span style="color:${tot>=0?'var(--over)':'var(--under)'}">${money(tot, true)}</span>`],
         ['ROI en $', `${(100*tot/bet).toFixed(1)}%`], ['Apostado', money(bet)], ...(open ? [['En juego', money(open)]] : [])]; })(),
   ].map(([k,v])=>`<div class="kpi"><div class="k">${k}</div><div class="big">${v}</div></div>`).join('');
+  renderPickWeeks(rows);
   if(!rows.length){ $('pickTable').innerHTML = '<tr><td class="empty">Todavía no hay picks. En "Partidos", pon la línea y elige OVER o UNDER.</td></tr>'; return; }
   $('pickTable').innerHTML = `<thead><tr><th>Fecha</th><th>Partido</th><th>Parámetro</th><th>Momento</th><th class="n">Línea</th><th class="n">Momio</th><th class="n">Proy.</th><th>Sugerencia</th><th>Pick</th><th class="n">Real</th><th>Res.</th><th class="n">Unid.</th><th class="n">Monto</th><th class="n">Ganancia</th><th></th></tr></thead><tbody>${
     rows.map(r=>`<tr><td>${r.date||''}</td><td>${badge(r.a)} @ ${badge(r.h)}</td><td>${METRICS[r.metric]?.label||r.metric}</td><td>${r.moment||'Pre'}${r.curAtPick!=null?` <span class="note">(iba ${r.curAtPick})</span>`:''}</td>
