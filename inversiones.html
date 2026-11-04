@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#000000">
+  <title>Mis Inversiones</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap">
+  <link rel="stylesheet" href="css/inversiones.css">
+  <script>try { document.documentElement.dataset.theme = localStorage.getItem('inv_tema') || 'matriz'; } catch (e) { document.documentElement.dataset.theme = 'matriz'; }</script>
+</head>
+<body>
+  <canvas id="lluvia" aria-hidden="true"></canvas>
+  <header class="top">
+    <div class="marca"><a href="index.html" class="volver" title="Volver a mi plan">←</a><span>Mis inversiones</span><small id="modo"></small></div>
+    <div class="acciones">
+      <span id="estado" class="estado"></span>
+      <button id="btnActualizar" class="btn sec">Actualizar precios</button>
+      <span id="usuario" class="usuario"></span>
+      <button id="btnSalir" class="btn sec">Salir</button>
+    </div>
+  </header>
+
+  <section id="login" class="login" hidden>
+    <h1>Mis inversiones</h1>
+    <p>Seguimiento de acciones, ETFs y CETES para aprender cómo se comportan.</p>
+    <button id="btnLogin" class="btn">Entrar con Google</button>
+    <p id="loginError" class="banner error" role="alert"></p>
+  </section>
+
+  <main id="app" hidden>
+    <nav id="tabs" class="tabs"></nav>
+    <div id="vista"></div>
+  </main>
+
+  <dialog id="dlg"></dialog>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <script type="module" src="js/inv/matriz.js"></script>
+  <script type="module" src="js/inv/app.js"></script>
+</body>
+</html>
