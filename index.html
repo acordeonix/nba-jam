@@ -231,6 +231,10 @@ tr.click{cursor:pointer}
   .cards{grid-template-columns:1fr}
   .big{font-size:19px}
 }
+.stgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,620px),1fr));gap:14px}
+.sth{margin:4px 0 6px;font:700 15px Barlow,sans-serif}
+tr.seed-po td:first-child{box-shadow:inset 3px 0 0 var(--over)} tr.seed-pi td:first-child{box-shadow:inset 3px 0 0 #e8963a}
+tr.cut td{border-bottom:2px dashed var(--line)}
 </style>
 </head>
 <body>
@@ -292,7 +296,11 @@ tr.click{cursor:pointer}
   </section>
 
   <section id="s-equipos">
-    <h2>Equipos — a favor, en contra y total</h2>
+    <h2>Tabla de posiciones</h2>
+    <p class="sub" id="stSub"></p>
+    <div class="stgrid"><div><h3 class="sth">Conferencia Este</h3><div class="tablewrap"><table id="stEast"></table></div></div>
+      <div><h3 class="sth">Conferencia Oeste</h3><div class="tablewrap"><table id="stWest"></table></div></div></div>
+    <h2 style="margin-top:18px">Equipos — a favor, en contra y total</h2>
     <p class="sub" id="eqSub"></p>
     <div class="tablewrap"><table id="eqTable"></table></div>
   </section>
@@ -1585,20 +1593,54 @@ $('cards').addEventListener('click', e => {
 });
 
 // ---------- render: equipos ----------
+const EAST = new Set(['ATL','BOS','BKN','CHA','CHI','CLE','DET','IND','MIA','MIL','NY','ORL','PHI','TOR','WSH']);
+const confOf = t => EAST.has(t) ? 'E' : 'W';
+// Tabla de posiciones con los partidos terminados de temporada regular
+function standings(){
+  const T = {};
+  const games = seasonGames().filter(g => g.h?.pts!=null && g.a?.pts!=null && (g.type==null || g.type===2)).sort((x,y)=>x.date.localeCompare(y.date));
+  for(const g of games) for(const [me, op, ha] of [[g.h,g.a,'H'],[g.a,g.h,'A']]){
+    const t = norm(me.t), w = me.pts > op.pts, r = (T[t] ||= { t, W:0, L:0, hW:0, hL:0, aW:0, aL:0, cW:0, cL:0, seq:[], pf:0, pa:0 });
+    w ? r.W++ : r.L++; if(ha==='H') w ? r.hW++ : r.hL++; else w ? r.aW++ : r.aL++;
+    if(confOf(norm(op.t)) === confOf(t)) w ? r.cW++ : r.cL++;
+    r.seq.push(w); r.pf += me.pts; r.pa += op.pts; }
+  for(const r of Object.values(T)){ const n = r.W + r.L; r.pct = n ? r.W/n : 0; r.diff = n ? (r.pf - r.pa)/n : 0;
+    const l10 = r.seq.slice(-10); r.l10 = `${l10.filter(x=>x).length}-${l10.filter(x=>!x).length}`;
+    let k = 0; const last = r.seq.at(-1); for(let i=r.seq.length-1; i>=0 && r.seq[i]===last; i--) k++; r.streak = r.seq.length ? (last?'G':'P')+k : '—'; r.conf = confOf(r.t); }
+  const out = { E:[], W:[] };
+  for(const c of ['E','W']){ const L = Object.values(T).filter(r=>r.conf===c).sort((a,b)=> b.pct-a.pct || b.W-a.W || b.diff-a.diff);
+    const top = L[0]; L.forEach((r,i) => { r.pos = i+1; r.gb = top ? ((top.W - r.W) + (r.L - top.L))/2 : 0; }); out[c] = L; }
+  return out;
+}
+function renderStandings(St){
+  const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
+  const tbl = L => L.length ? `<thead><tr><th class="n">#</th><th>Equipo</th><th class="n">G</th><th class="n">P</th><th class="n">%</th><th class="n">JD</th><th class="n">Local</th><th class="n">Visita</th><th class="n">Conf.</th><th class="n">Últ. 10</th><th class="n">Racha</th><th class="n">Dif.</th></tr></thead><tbody>${
+    L.map(r => `<tr class="${r.pos<=6?'seed-po':r.pos<=10?'seed-pi':''} ${r.pos===6||r.pos===10?'cut':''}"><td class="n">${r.pos}</td><td style="white-space:nowrap">${badge(r.t)} ${tname(r.t)}</td>
+      <td class="n"><b>${r.W}</b></td><td class="n">${r.L}</td><td class="n">${r.pct.toFixed(3).replace(/^0/,'')}</td><td class="n">${r.gb ? r.gb.toFixed(1) : '—'}</td>
+      <td class="n">${r.hW}-${r.hL}</td><td class="n">${r.aW}-${r.aL}</td><td class="n">${r.cW}-${r.cL}</td><td class="n">${r.l10}</td>
+      <td class="n" style="color:${r.streak[0]==='G'?'var(--over)':'var(--under)'}"><b>${r.streak}</b></td><td class="n" style="${col(r.diff)}">${sgn(r.diff,1)}</td></tr>`).join('')}</tbody>`
+    : '<tr><td class="empty">Sin partidos todavía.</td></tr>';
+  $('stEast').innerHTML = tbl(St.E); $('stWest').innerHTML = tbl(St.W);
+  $('stSub').innerHTML = `Temporada regular, con los partidos ya terminados. <b>JD</b> = juegos detrás del líder de la conferencia · <b>Conf.</b> = récord contra su propia conferencia · <b>Racha</b>: G = ganando, P = perdiendo · <b>Dif.</b> = puntos a favor menos en contra por partido.
+    <span style="border-left:3px solid var(--over);padding-left:5px">1–6 playoffs directos</span> · <span style="border-left:3px solid #e8963a;padding-left:5px">7–10 play-in</span>. Desempate simple (porcentaje, luego diferencia de puntos), no el oficial de la NBA.`;
+}
 function renderEquipos(){
   const m = METRICS[S.metric];
   const teams = Object.keys(teamLogs());
   $('eqSub').textContent = `${m.label} · ${S.stat==='median'?'mediana':'promedio'} por juego · ${Number(S.win)?'últimos '+S.win:'toda la temporada'}. "Total" = a favor + en contra (el HTGA/VTGA de tu hoja). Ritmo = posesiones por partido; /100 = por cada 100 posesiones.`;
+  const St = standings(), stBy = Object.fromEntries([...St.E, ...St.W].map(r=>[r.t, r]));
+  renderStandings(St);
   if(!teams.length){ $('eqTable').innerHTML = '<tr><td class="empty">Sin datos todavía.</td></tr>'; return; }
   const rows = teams.map(t => {
     const all = teamStats(t, null), home = (()=>{ const sv=S.split; S.split='ha'; const r=teamStats(t,'H'); S.split=sv; return r; })(),
           away = (()=>{ const sv=S.split; S.split='ha'; const r=teamStats(t,'A'); S.split=sv; return r; })();
     const r = { t, gp:all.gp, f:all.f, c:all.c, tot:all.tot, sd:all.sd, home:home.tot, away:away.tot };
+    const sr = stBy[t]; if(sr){ r.rec = sr.pct; r.recT = `${sr.W}-${sr.L}`; r.pos = (sr.conf==='E'?0:100) + sr.pos; r.posT = `${sr.pos}° ${sr.conf==='E'?'Este':'Oeste'}`; }
     if(S.metric==='ast'){ const T=teamStats(t,null,'to'); r.to=T.f; r.ato = T.f? all.f/T.f : null; }
     const pc = paceOf(all.logs, m.f); if(pc){ r.pace = pc.pace; r.o100 = pc.off*100; r.d100 = pc.def*100; }
     return r;
   });
-  const cols = [['t','Equipo'],['gp','GP'],['f','A favor'],['c','En contra'],['tot','Total'],['sd','Desv.'],['home','Total local'],['away','Total visita']];
+  const cols = [['t','Equipo'],['rec','G-P'],['pos','Lugar'],['gp','GP'],['f','A favor'],['c','En contra'],['tot','Total'],['sd','Desv.'],['home','Total local'],['away','Total visita']];
   if(S.metric==='ast') cols.push(['to','TO/G'],['ato','A/TO']);
   cols.push(['pace','Ritmo'],['o100','A favor /100'],['d100','En contra /100']);
   const [sk, dir] = S.eqSort;
@@ -1608,11 +1650,12 @@ function renderEquipos(){
   $('eqTable').innerHTML = `<thead><tr><th class="n">#</th>${cols.map(([k,l])=>`<th data-k="${k}" class="${k==='t'?'':'n'} ${k===sk?'sorted'+(dir>0?' asc':''):''}">${l}</th>`).join('')}</tr></thead>
     <tbody>${rows.map((r,i)=>`<tr><td class="n">${i+1}</td>${cols.map(([k])=> k==='t' ? `<td><span class="tm" style="font-size:14px">${badge(r.t)} ${tname(r.t)}</span></td>`
       : k==='tot' ? `<td class="n"><b>${fmt(r.tot)}</b><span class="bar" style="width:${r.tot!=null&&maxTot>minTot?8+40*(r.tot-minTot)/(maxTot-minTot):0}px"></span></td>`
+      : k==='rec' ? `<td class="n">${r.recT ?? '—'}</td>` : k==='pos' ? `<td class="n" style="white-space:nowrap">${r.posT ?? '—'}</td>`
       : `<td class="n">${fmt(r[k], dec(k))}</td>`).join('')}</tr>`).join('')}</tbody>`;
 }
 $('eqTable').addEventListener('click', e => {
   const k = e.target.closest('th')?.dataset.k; if(!k) return;
-  S.eqSort = S.eqSort[0]===k ? [k, -S.eqSort[1]] : [k, k==='t'?1:-1];
+  S.eqSort = S.eqSort[0]===k ? [k, -S.eqSort[1]] : [k, k==='t'||k==='pos'?1:-1];
   store.set('eqSort', S.eqSort); renderEquipos();
 });
 
