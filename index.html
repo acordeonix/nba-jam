@@ -2663,8 +2663,15 @@ function teamForecast(){
   try{ fut = fut.map(x => { const g = { id:x.id, date:x.date, h:{t:x.h}, a:{t:x.a} }; const L = futLine(x);
       const P = project(x.h, x.a, L, null, g); return { ...x, p:P.proj, line:L, side: P.proj!=null && L!=null ? (P.proj > L ? 'OVER' : P.proj < L ? 'UNDER' : '—') : null }; }); }
   finally { S.model = sv.m; S.asOf = sv.a; }
+  // % de acierto estimado por partido: el modelo con cada equipo y, si ya hay línea, con ventajas de ese tamaño; todo ajustado hacia su % general
+  const K = 10, shrink = (w, n) => (w + K*gAcc) / (n + K);
+  const accT = T => { const ids = new Set(), R = gR.filter(r => (r.h===T || r.a===T) && !ids.has(r.id) && ids.add(r.id)); const w = R.filter(r=>r.res==='W').length; return { p: shrink(w, R.length), w, n: R.length }; };
+  const EB = [[0,2,'0–2'],[2,4,'2–4'],[4,6,'4–6'],[6,99,'6+']];
+  const accE = e => { const b = EB.find(([a,z]) => e >= a && e < z) || EB.at(-1); const R = gR.filter(r => { const d = Math.abs(r.p - r.line); return d >= b[0] && d < b[1]; }); const w = R.filter(r=>r.res==='W').length; return { p: shrink(w, R.length), w, n: R.length, lbl: b[2] }; };
+  fut = fut.map(x => { const opp = x.h===t ? x.a : x.h, A = accT(t), B = accT(opp), E = x.line!=null && x.p!=null ? accE(Math.abs(x.p - x.line)) : null;
+    const parts = [A.p, B.p, ...(E ? [E.p] : [])]; return { ...x, acc: mean(parts), aT:A, aO:B, aE:E }; });
   const pts = [...past.map(r => ({ kind:'past', date:r.date, opp: r.h===t ? r.a : r.h, home: r.h===t, p:r.p, line:r.line, act:r.act, res:r.res, side:r.side })),
-               ...fut.map(x => ({ kind:'fut', date:x.date, opp: x.h===t ? x.a : x.h, home: x.h===t, p:x.p, line:x.line, side:x.side }))];
+               ...fut.map(x => ({ kind:'fut', date:x.date, opp: x.h===t ? x.a : x.h, home: x.h===t, p:x.p, line:x.line, side:x.side, acc:x.acc }))];
   if(!pts.length){ $('tfSub').textContent = ''; $('tfChart').innerHTML = '<p class="note">Sin partidos con línea para este equipo todavía.</p>'; $('tfAcc').innerHTML = ''; $('tfNext').innerHTML = ''; return; }
   // ---- gráfica principal ----
   const W = 760, H = 280, pl = 44, pr = 16, pt = 14, pb = 40, n = pts.length;
@@ -2683,12 +2690,13 @@ function teamForecast(){
   if(nPast) svg += `<path d="${path('act',0,nPast-1)}" fill="none" stroke="var(--s1)" stroke-width="2.5"/>`;
   svg += pts.map((o,i) => o.kind==='past'
       ? `<circle cx="${X(i)}" cy="${Y(o.act)}" r="5" fill="${o.res==='W'?'var(--over)':o.res==='L'?'var(--under)':'var(--muted)'}" stroke="var(--panel)" stroke-width="1.5"/>`
-      : (o.p!=null ? `<circle cx="${X(i)}" cy="${Y(o.p)}" r="4.5" fill="var(--panel)" stroke="var(--s2)" stroke-width="2"/>` : '')).join('');
+      : (o.p!=null ? `<circle cx="${X(i)}" cy="${Y(o.p)}" r="4.5" fill="var(--panel)" stroke="var(--s2)" stroke-width="2"/>
+          <text x="${X(i)}" y="${Y(o.p)-10}" text-anchor="middle" style="font-weight:700;fill:${o.acc>=0.55?'var(--over)':o.acc>=0.524?'var(--ink)':'var(--under)'}">${Math.round(100*o.acc)}%</text>` : '')).join('');
   svg += pts.map((o,i) => `<rect class="tfh" data-i="${i}" x="${X(i)-(W-pl-pr)/(2*Math.max(1,n-1))}" y="${pt}" width="${(W-pl-pr)/Math.max(1,n-1)}" height="${H-pt-pb}" fill="transparent"/>`).join('');
   svg += `</svg>`;
   $('tfChart').innerHTML = `<div class="lgd"><span><i style="background:var(--s1)"></i>Real</span><span><i style="background:var(--muted)"></i>Línea</span><span><i style="background:var(--s2)"></i>${MODEL_LBL[mo].split(' (')[0]} (punteada = pronóstico)</span><span><i style="background:var(--over)"></i>Acertó</span><span><i style="background:var(--under)"></i>Falló</span></div>` + svg;
   $('tfChart').querySelectorAll('.tfh').forEach(r => { const o = pts[+r.dataset.i];
-    r.addEventListener('mousemove', e => tipShow(e, `<b>${shortD(o.date)} · ${o.home?'vs':'@'} ${tname(o.opp)}</b>${o.kind==='fut'?' <span class="note">(próximo)</span>':''}<br>Proyección <b>${o.p!=null?fmt(o.p):'—'}</b> · línea ${o.line ?? (o.kind==='fut'?'aún no sale':'—')}${o.kind==='past'?` · real <b>${o.act}</b><br>Modelo dijo ${o.side} → ${o.res==='W'?'✓ acertó':o.res==='L'?'✗ falló':'empate'} · diferencia ${sgn(o.act - o.p,1)}`:o.side?`<br>Pronóstico: <b>${o.side}</b> por ${fmt(Math.abs(o.p - o.line),1)}`:''}`));
+    r.addEventListener('mousemove', e => tipShow(e, `<b>${shortD(o.date)} · ${o.home?'vs':'@'} ${tname(o.opp)}</b>${o.kind==='fut'?' <span class="note">(próximo)</span>':''}<br>Proyección <b>${o.p!=null?fmt(o.p):'—'}</b> · línea ${o.line ?? (o.kind==='fut'?'aún no sale':'—')}${o.kind==='past'?` · real <b>${o.act}</b><br>Modelo dijo ${o.side} → ${o.res==='W'?'✓ acertó':o.res==='L'?'✗ falló':'empate'} · diferencia ${sgn(o.act - o.p,1)}`:o.side?`<br>Pronóstico: <b>${o.side}</b> por ${fmt(Math.abs(o.p - o.line),1)}`:''}${o.kind==='fut'?`<br>Acierto estimado: <b>${Math.round(100*o.acc)}%</b>`:''}`));
     r.addEventListener('mouseleave', tipHide); });
   // ---- acierto acumulado y de los últimos 5 ----
   const dec = past0.filter(r => r.res==='W' || r.res==='L');
@@ -2715,9 +2723,18 @@ function teamForecast(){
   if(nx){
     const lineTxt = nx.line!=null ? `línea <b>${nx.line}</b> → <b style="color:var(--${nx.side==='OVER'?'over':'under'})">${nx.side} por ${fmt(Math.abs(nx.p - nx.line),1)}</b>` : 'la línea todavía no sale';
     $('tfNext').innerHTML = `<div class="tfnext"><b>Siguiente partido:</b> ${shortD(nx.date)} ${nx.h===t?'vs':'@'} ${tname(nx.h===t?nx.a:nx.h)} · proyección <b>${nx.p!=null?fmt(nx.p):'—'}</b> · ${lineTxt}<br>
-      <b>Probabilidad estimada de acertar: ${Math.round(100*shr)}%</b> <span class="note">(su ${dec.length?`${Math.round(100*nW/dec.length)}% con este equipo en ${dec.length} partidos`:'sin historial con este equipo'}, ajustado hacia el ${Math.round(100*gAcc)}% general del modelo porque con pocos juegos una racha engaña). ${shr >= 0.55 ? 'Arriba del 52.4% que pide −110.' : shr >= 0.524 ? 'Apenas arriba del 52.4%: ventaja muy chica.' : 'Abajo del 52.4%: con este equipo el modelo no está siendo confiable.'}</span></div>`
-      + (fut.length > 1 ? `<p class="note" style="margin-top:6px">Después: ${fut.slice(1).map(x => `${shortD(x.date)} ${x.h===t?'vs':'@'} ${x.h===t?x.a:x.h} → ${x.p!=null?fmt(x.p,0):'—'}`).join(' · ')}. Los pronósticos lejanos cambian conforme se juegan partidos y se conocen las bajas.</p>` : '');
+      <b>Probabilidad estimada de acertar: ${Math.round(100*nx.acc)}%</b> <span class="note">(${accWhy(nx, t)}). ${nx.acc >= 0.55 ? 'Arriba del 52.4% que pide −110.' : nx.acc >= 0.524 ? 'Apenas arriba del 52.4%: ventaja muy chica.' : 'Abajo del 52.4%: el modelo no está siendo confiable en este partido.'}</span></div>`
+      + `<div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Próximos</th><th>Rival</th><th class="n">Proyección</th><th class="n">Línea</th><th class="n">Lado</th><th class="n">Acierto estimado</th><th class="n">Modelo con ${t}</th><th class="n">Con el rival</th><th class="n">Ventaja así</th></tr></thead><tbody>${
+        fut.map(x => { const opp = x.h===t ? x.a : x.h, c = x.acc>=0.55 ? 'var(--over)' : x.acc>=0.524 ? 'inherit' : 'var(--under)', pc = o => `${Math.round(100*o.p)}% <span class="note">${o.w}-${o.n-o.w}</span>`;
+          return `<tr><td style="white-space:nowrap">${shortD(x.date)}</td><td style="white-space:nowrap">${x.h===t?'vs':'@'} ${tname(opp)}</td><td class="n">${x.p!=null?fmt(x.p):'—'}</td><td class="n">${x.line ?? '<span class="note">aún no</span>'}</td>
+            <td class="n">${x.side ? `<b style="color:var(--${x.side==='OVER'?'over':'under'})">${x.side}</b>` : '—'}</td><td class="n" style="color:${c}"><b>${Math.round(100*x.acc)}%</b></td>
+            <td class="n">${pc(x.aT)}</td><td class="n">${pc(x.aO)}</td><td class="n">${x.aE ? `${pc(x.aE)} <span class="note">(${x.aE.lbl} pts)</span>` : '<span class="note">sin línea</span>'}</td></tr>`; }).join('')}</tbody></table></div>
+        <p class="note" style="margin-top:6px"><b>Acierto estimado</b> = promedio de qué tan bien le ha ido al modelo con este equipo, con el rival y (cuando ya sale la línea) con ventajas de ese tamaño; cada uno ajustado hacia el ${Math.round(100*gAcc)}% general del modelo para que pocos juegos no engañen. Verde = 55% o más, rojo = abajo de 52.4%. Los partidos lejanos cambian conforme se juegan otros y se conocen las bajas.</p>`;
   } else $('tfNext').innerHTML = `<p class="note">${sc && !sc.list ? 'No se pudo cargar el calendario de ESPN; ' : ''}No hay próximos partidos cargados para ${tname(t)}.</p>`;
+}
+function accWhy(x, t){
+  const opp = x.h===t ? x.a : x.h, f = o => `${Math.round(100*o.p)}%`;
+  return `modelo con ${t} ${f(x.aT)} (${x.aT.w}-${x.aT.n-x.aT.w}), con ${opp} ${f(x.aO)} (${x.aO.w}-${x.aO.n-x.aO.w})${x.aE ? `, con ventajas de ${x.aE.lbl} pts ${f(x.aE)} (${x.aE.w}-${x.aE.n-x.aE.w})` : ', la línea todavía no sale'}; promediado y ajustado hacia el % general`;
 }
 function futLine(x){
   const g = S.live.find(z => String(z.id)===String(x.id)) || S.slateFile.find(z => String(z.id)===String(x.id));
