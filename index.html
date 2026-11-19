@@ -339,6 +339,12 @@ tr.cut td{border-bottom:2px dashed var(--line)}
           <div class="ctl"><label for="tfModel">Modelo</label><select id="tfModel"><option value="pace">Ritmo × eficiencia</option><option value="players">Jugadores</option><option value="mix">Mixto</option><option value="avg">Promedios</option></select></div>
           <div class="ctl"><label for="tfN">Partidos atrás</label><select id="tfN"><option value="10">10</option><option value="15" selected>15</option><option value="25">25</option><option value="0">Todos</option></select></div></div>
         <p class="note" id="tfSub"></p><div id="tfChart"></div><div id="tfAcc"></div><div id="tfNext"></div></div>
+      <div class="chartcard"><h3>Equipos en seguimiento: acierto desde que los empecé a seguir</h3>
+        <div class="row" style="margin:6px 0;align-items:flex-end"><div class="ctl"><label for="fwTeam">Equipo</label><select id="fwTeam"></select></div>
+          <div class="ctl"><label for="fwDate">Seguir desde</label><input type="date" id="fwDate"></div>
+          <button class="primary" id="fwAdd" type="button">+ Seguir</button>
+          <div class="ctl"><label for="fwModel">Modelo</label><select id="fwModel"><option value="pace">Ritmo × eficiencia</option><option value="players">Jugadores</option><option value="mix">Mixto</option><option value="avg">Promedios</option></select></div></div>
+        <p class="note" id="fwSub"></p><div id="fwChart"></div><div class="tablewrap"><table id="fwTable"></table></div></div>
       <div class="chartcard"><h3>Campana de Gauss</h3><p class="note" id="chGaussSub"></p><div id="chGauss"></div></div>
       <div class="chartcard"><h3>¿Los partidos terminan arriba o abajo de la línea? (toda la liga, por semana)</h3><p class="note" id="chLineSub"></p><div id="chLine"></div></div>
       <div class="chartcard"><h3>Pareto de ganancias: ¿qué genera el 80% de lo ganado?</h3>
@@ -1307,15 +1313,12 @@ const regGet = mo => store.get(regKey(mo), null);
 const regActive = f => !!f && f.n >= REG_MIN && f.helps;
 // Línea en la tarjeta cuando el ajuste está activo para el modelo elegido
 function regHTML(E, line){
-  const f = regGet(S.model); if(!regActive(f) || E.proj==null || line==='' || line==null || E.el!=null) return '';
+  const f = regGet(S.model); if(!f || f.n < REG_MIN || E.proj==null || line==='' || line==null || E.el!=null) return '';
   const L = Number(line), ed = f.a + f.b*(E.proj - L), side = ed > 0 ? 'OVER' : 'UNDER', flip = E.sug && side !== E.sug;
-  return `<div class="meta"><span>Regresión (${f.n} partidos): esperado <b>${fmt(L + ed)}</b> → <b style="color:var(--${side==='OVER'?'over':'under'})">${side} ${sgn(ed,1)}</b>
-    ${flip ? ' <b style="color:var(--under)">⚠ contradice al modelo</b>' : Math.abs(ed) < 1 ? ' <span class="note">(ventaja muy chica)</span>' : ''}</span></div>`;
+  return `<div class="meta"><span class="note">💡 Sugerencia de la regresión (${f.n} partidos, no cambia el modelo): esperado <b>${fmt(L + ed)}</b> → ${side} ${sgn(ed,1)}${flip ? ' · <b>no coincide con el modelo</b>' : Math.abs(ed) < 1 ? ' · ventaja casi nula' : ''}</span></div>`;
 }
 function stakeNote(E, od){
   if(E.el!=null || E.proj==null || E.diff==null || !E.diff) return '';   // solo antes del partido
-  { const f = regGet(S.model); if(regActive(f)){ const ed = f.a + f.b*E.diff;
-    if((ed > 0 ? 'OVER' : 'UNDER') !== E.sug || Math.abs(ed) < 1) return `<span class="stake none">No apostar <span class="note">(la regresión con ${f.n} partidos deja la ventaja en ${sgn(ed,1)})</span></span>`; } }
   const side = E.sug, real = oddsDec(side==='OVER' ? od.o : od.u), dec = real || 1.909;   // sin momio de ese lado: se supone −110
   let st; try{ st = stakeFor(Math.abs(E.diff), dec); } catch { return ''; }
   if(!st) return '';
@@ -2554,6 +2557,7 @@ function renderCharts(){
   paretoPlayers();
   try{ scatterProj(); heatTeamWeek(); } catch(e){ console.warn('scatter/heat', e); }
   try{ teamForecast(); } catch(e){ console.warn('forecast', e); }
+  try{ followTeams(); } catch(e){ console.warn('follow', e); }
 }
 // ---------- Pareto (80/20) ----------
 function hbars(items, opt={}){
@@ -2746,6 +2750,50 @@ function futLine(x){
   if(preH) return Number(preH.line); if(my!=null && my!=='') return Number(my);
   const mk = g?.mk; return S.metric==='pts' && mk?.ou!=null ? Number(mk.ou) : null;
 }
+// ---------- Equipos en seguimiento: se mide sólo desde la fecha en que empiezas a seguirlo (sin mirar hacia atrás) ----------
+function followTeams(){
+  const sel = $('fwTeam');
+  if(!sel.options.length){ sel.innerHTML = Object.keys(TEAMS).sort((x,y)=>tname(x).localeCompare(tname(y))).map(t=>`<option value="${t}">${tname(t)}</option>`).join('');
+    $('fwDate').value = etToday(); $('fwModel').value = store.get('fwModel', 'pace'); }
+  const mo = $('fwModel').value; store.set('fwModel', mo);
+  const F = store.get('follow', []);
+  if(!F.length){ $('fwSub').innerHTML = 'Elige un equipo y la fecha desde la que lo quieres seguir (por omisión, hoy) y presiona <b>+ Seguir</b>. Aquí sólo cuentan los partidos <b>a partir de esa fecha</b>, para saber si la racha que viste continúa o era suerte.'; $('fwChart').innerHTML = ''; $('fwTable').innerHTML = ''; return; }
+  const R = preRows().filter(r => r.mo===mo && (r.res==='W' || r.res==='L'));
+  const recOf = L => { const w = L.filter(r=>r.res==='W').length; return { w, l: L.length - w, n: L.length, pct: L.length ? w/L.length : null, u: L.reduce((a,r)=>a + (r.res==='W' ? (r.dec ? r.dec-1 : 0.909) : -1), 0) }; };
+  const pal = ['var(--s1)','var(--s2)','var(--s3)','#c77dff','#ffd166','#ef476f','#06d6a0','#8d99ae'];
+  const rows = F.map((f,i) => { const T = R.filter(r => r.h===f.t || r.a===f.t), ids = new Set(), U = T.filter(r => !ids.has(r.id) && ids.add(r.id)).sort((x,y)=>x.date.localeCompare(y.date));
+    const before = U.filter(r => r.date < f.since), after = U.filter(r => r.date >= f.since);
+    let w = 0; const cum = after.map((r,k) => { if(r.res==='W') w++; return w/(k+1); });
+    return { ...f, i, col: pal[i % pal.length], B: recOf(before), A: recOf(after), after, cum }; });
+  // gráfica: % acumulado desde que se sigue, por número de partido
+  const mx = Math.max(0, ...rows.map(r => r.cum.length));
+  if(mx >= 1){
+    const W = 760, H = 220, pl = 44, pr = 70, pt = 12, pb = 28, X = k => mx===1 ? (pl+W-pr)/2 : pl + k*(W-pl-pr)/(mx-1), Y = v => pt + (H-pt-pb)*(1-v);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Acierto desde que se sigue cada equipo">`;
+    svg += [0,0.25,0.5,0.75,1].map(v => `<line x1="${pl}" x2="${W-pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${pl-6}" y="${Y(v)+4}" text-anchor="end">${v*100}%</text>`).join('');
+    svg += `<line x1="${pl}" x2="${W-pr}" y1="${Y(0.524)}" y2="${Y(0.524)}" stroke="var(--muted)" stroke-dasharray="5 4"/><text x="${pl+6}" y="${Y(0.524)-5}" style="font-size:10px">52.4%</text>`;
+    svg += Array.from({length:mx}, (_,k) => `<text x="${X(k)}" y="${H-8}" text-anchor="middle" style="font-size:10px">${k+1}</text>`).join('');
+    for(const r of rows){ if(!r.cum.length) continue;
+      svg += `<path d="${r.cum.map((v,k)=>`${k?'L':'M'}${X(k).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${r.col}" stroke-width="2.5"/>`;
+      svg += r.after.map((g,k) => `<circle cx="${X(k)}" cy="${Y(r.cum[k])}" r="4" fill="${g.res==='W'?'var(--over)':'var(--under)'}" stroke="${r.col}" stroke-width="1.5"/>`).join('');
+      svg += `<text x="${X(r.cum.length-1)+8}" y="${Y(r.cum.at(-1))+4}" style="fill:${r.col};font-weight:700">${r.t} ${Math.round(100*r.cum.at(-1))}%</text>`; }
+    svg += `</svg>`;
+    $('fwChart').innerHTML = `<div class="lgd">${rows.map(r=>`<span><i style="background:${r.col}"></i>${tname(r.t)}</span>`).join('')}</div>${svg}<p class="note" style="margin:2px 0 8px">Eje de abajo: partido 1, 2, 3… desde que empezaste a seguir a cada equipo. Punto verde = el modelo acertó el lado, rojo = falló.</p>`;
+  } else $('fwChart').innerHTML = '<p class="note">Todavía no se juega ningún partido desde que empezaste a seguirlos. Aquí irán apareciendo.</p>';
+  const pc = o => o.n ? `<b>${Math.round(100*o.pct)}%</b> <span class="note">${o.w}-${o.l}</span>` : '<span class="note">—</span>';
+  const verdict = r => { const n = r.A.n, f = 15 - n;
+    if(n < 15) return `<span class="note">${n ? (r.A.pct >= 0.6 ? 'va bien' : r.A.pct >= 0.524 ? 'parejo' : 'va abajo') + ', pero ' : ''}falta${f===1?'':'n'} ${f} partido${f===1?'':'s'} para una primera lectura</span>`;
+    if(n < 30) return r.A.pct >= 0.6 ? 'va bien; con 30 partidos se confirma' : r.A.pct >= 0.524 ? 'normal, como el modelo en general' : '<span style="color:var(--under)">la racha no siguió</span>';
+    return r.A.pct >= 0.6 ? '<b style="color:var(--over)">tendencia real</b>' : r.A.pct >= 0.524 ? 'normal, como el modelo en general' : '<b style="color:var(--under)">no se sostuvo</b>'; };
+  $('fwTable').innerHTML = `<thead><tr><th>Equipo</th><th>Desde</th><th class="n">Antes de seguirlo</th><th class="n">Desde que lo sigo</th><th class="n">Unidades</th><th>Últimos</th><th>Lectura</th><th></th></tr></thead><tbody>${
+    rows.map(r => `<tr><td style="white-space:nowrap"><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${r.col};margin-right:6px"></i>${tname(r.t)}</td><td style="white-space:nowrap">${shortD(r.since)}</td>
+      <td class="n">${pc(r.B)}</td><td class="n">${pc(r.A)}</td><td class="n" style="color:${r.A.u>0?'var(--over)':r.A.u<0?'var(--under)':'inherit'}">${r.A.n ? sgn(r.A.u,2) : '—'}</td>
+      <td style="white-space:nowrap">${r.after.slice(-8).map(g => `<span title="${shortD(g.date)} ${g.a}@${g.h}" style="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:2px;background:${g.res==='W'?'var(--over)':'var(--under)'}"></span>`).join('') || '<span class="note">—</span>'}</td>
+      <td>${verdict(r)}</td><td><button style="min-height:26px;padding:2px 8px" class="fwDel" data-i="${r.i}" type="button" title="Dejar de seguir">✕</button></td></tr>`).join('')}</tbody>`;
+  const tot = recOf(rows.flatMap(r => r.after));
+  $('fwSub').innerHTML = `Modelo ${MODEL_LBL[mo].split(' (')[0]}. <b>Antes de seguirlo</b> es la racha que viste; <b>Desde que lo sigo</b> es la prueba honesta: sólo partidos jugados después de la fecha elegida. ${tot.n ? `Juntando todos: <b>${tot.w}-${tot.l} (${Math.round(100*tot.pct)}%)</b>, ${sgn(tot.u,2)} u. Compáralo con el ~55% del modelo en todos los partidos: si queda arriba con 15+ partidos, seguir equipos sí ayuda.` : ''} Se guarda en este dispositivo.`;
+  $('fwTable').querySelectorAll('.fwDel').forEach(b => b.onclick = () => { const L = store.get('follow', []); L.splice(+b.dataset.i, 1); store.set('follow', L); followTeams(); });
+}
 // ---------- 4) Proyección vs. real ----------
 function scatterProj(){
   const mo = $('scModel').value, allR = preRows(), rows = allR.filter(r => r.mo===mo);
@@ -2775,8 +2823,8 @@ function scatterProj(){
   $('scSub').innerHTML = `${MODEL_LBL[mo]} · ${rows.length} partidos. Cada punto es un partido: a la derecha lo que proyectó el modelo, arriba lo que terminó. Sobre la diagonal = terminó más alto que la proyección.
     Correlación <b>${fmt(corr,2)}</b> (1 = perfecta, 0 = nada) · error promedio <b>${fmt(mae,1)}</b> pts · sesgo <b>${sgn(bias,1)}</b> (${bias<0?'el real queda abajo de la proyección':'el real queda arriba de la proyección'}) · lado vs. línea ${w}-${l}. La franja sombreada es ±${fmt(se,0)} pts; los puntos con borde son los que fallaron por más del doble.`;
   if(fit){ const pc = x => x[0]+x[1] ? Math.round(100*x[0]/(x[0]+x[1]))+'%' : '—', test = `prueba con partidos anteriores: sin ajuste ${fit.raw[0]}-${fit.raw[1]} (${pc(fit.raw)}), con ajuste ${fit.adj[0]}-${fit.adj[1]} (${pc(fit.adj)})`;
-    const st = fit.n < REG_MIN ? `<b>⏳ Ajuste en espera:</b> ${fit.n} de ${REG_MIN} partidos (${Math.round(100*fit.n/REG_MIN)}%). Mientras, las tarjetas usan la proyección normal.`
-      : fit.helps ? `<b style="color:var(--over)">✓ Ajuste activo en las tarjetas</b> (${fit.n} partidos).` : `<b>Ajuste no aplicado:</b> ya hay ${fit.n} partidos pero corregir no mejora el acierto.`;
+    const st = fit.n < REG_MIN ? `<b>⏳ Sugerencia en espera:</b> ${fit.n} de ${REG_MIN} partidos (${Math.round(100*fit.n/REG_MIN)}%).`
+      : `<b>💡 Ya hay ${fit.n} partidos:</b> las tarjetas muestran la regresión sólo como sugerencia; el modelo no se modifica. ${fit.helps ? 'En la prueba, corregir no empeoró el acierto.' : 'En la prueba, corregir habría empeorado el acierto.'}`;
     $('scSub').innerHTML += `<br><b>Recta de regresión</b> (punteada): real = ${fmt(fit.ta,0)} + ${fmt(fit.tb,2)} × proyección · R² ${Math.round(100*fit.tr2)}%.
       Para apostar: de cada punto de ventaja se cumplen <b>${fmt(fit.b,2)}</b> y el sesgo es <b>${sgn(fit.a,1)}</b> (${fit.b < 0.7 ? 'el modelo exagera la ventaja' : fit.b > 1.3 ? 'el modelo se queda corto' : 'ventaja bien medida'}).
       <br>${st} <span class="note">${test}.</span>`; }
@@ -2824,6 +2872,9 @@ $('chData').onchange = renderCharts;
 $('grView').onchange = renderCharts; $('grLine').addEventListener('input', renderCharts);
 for(const id of ['paBy','paModel','scModel','hmVal']) $(id).onchange = renderCharts;
 for(const id of ['tfTeam','tfModel','tfN']) $(id).onchange = () => { try{ teamForecast(); } catch(e){ console.warn('forecast', e); } };
+$('fwModel').onchange = () => followTeams();
+$('fwAdd').onclick = () => { const t = $('fwTeam').value, since = $('fwDate').value || etToday(), L = store.get('follow', []);
+  const k = L.findIndex(f => f.t===t); if(k >= 0) L[k].since = since; else L.push({ t, since }); store.set('follow', L); followTeams(); };
 $('regView').addEventListener('change', renderRegistro);
 
 // ---------- render: picks ----------
