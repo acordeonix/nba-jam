@@ -963,7 +963,29 @@ async function loadLive(date){
     const r = await fetch(`${ESPN}/scoreboard?dates=${d}&limit=50`);
     if(!r.ok) throw new Error(r.status);
     const j = await r.json();
-    S.live = (j.events||[]).map(ev => {
+    S.live = parseScoreboard(j, date);
+    S.liveOk = true;
+    $('liveNote').textContent = `En vivo de ESPN · ${new Date().toLocaleTimeString('es-MX',{timeStyle:'short'})}`;
+  }catch(e){
+    S.liveOk = false;
+    S.live = S.slateFile.filter(x=>x.date===date).map(x=>({ id:x.id, date, start:x.start, type:x.type, state:'pre', detail:'', h:{t:norm(x.h),st:{}}, a:{t:norm(x.a),st:{}}, mk:x.mk||null }));
+    $('liveNote').textContent = S.live.length ? 'Sin conexión a ESPN: mostrando calendario guardado.' : 'Sin conexión a ESPN y sin calendario guardado para esta fecha.';
+  }
+}
+// Marcadores finales de días anteriores que el recolector todavía no guarda (para calificar picks pendientes)
+S.past = {};
+async function ensurePastFinals(){
+  const today = etToday(), need = [...new Set(S.picks.filter(p => p.date && p.date < today && !finalFromDB(p.id) && !S.live.some(x => x.id===p.id && x.state==='post'))
+    .map(p => p.date))].filter(d => !S.past[d] || (Date.now() - S.past[d].ts > 10*60e3 && (!S.past[d].list.length || S.past[d].list.some(x => x.state!=='post'))));
+  if(!need.length) return false;
+  await Promise.all(need.slice(-7).map(async d => {
+    try{ const r = await fetch(`${ESPN}/scoreboard?dates=${d.replaceAll('-','')}&limit=50`); if(!r.ok) throw 0;
+      S.past[d] = { ts:Date.now(), list: parseScoreboard(await r.json(), d) }; }
+    catch{ S.past[d] = { ts:Date.now(), list:[] }; } }));
+  return true;
+}
+function parseScoreboard(j, date){
+    return (j.events||[]).map(ev => {
       const comp = ev.competitions[0];
       const side = ha => {
         const c = comp.competitors.find(x=>x.homeAway===ha);
@@ -990,13 +1012,6 @@ async function loadLive(date){
       return { id:ev.id, date, start:ev.date, type:ev.season?.type, state:ev.status?.type?.state, detail:ev.status?.type?.shortDetail,
         period:ev.status?.period, clock:ev.status?.displayClock, h:side('home'), a:side('away'), mk };
     });
-    S.liveOk = true;
-    $('liveNote').textContent = `En vivo de ESPN · ${new Date().toLocaleTimeString('es-MX',{timeStyle:'short'})}`;
-  }catch(e){
-    S.liveOk = false;
-    S.live = S.slateFile.filter(x=>x.date===date).map(x=>({ id:x.id, date, start:x.start, type:x.type, state:'pre', detail:'', h:{t:norm(x.h),st:{}}, a:{t:norm(x.a),st:{}}, mk:x.mk||null }));
-    $('liveNote').textContent = S.live.length ? 'Sin conexión a ESPN: mostrando calendario guardado.' : 'Sin conexión a ESPN y sin calendario guardado para esta fecha.';
-  }
 }
 
 // ---------- proyección en vivo ----------
@@ -2883,7 +2898,7 @@ function gradePick(p){
   const db = finalFromDB(p.id);
   const f = METRICS[p.metric].f;
   if(db){ const a=f(db.h), b=f(db.a); if(a!=null&&b!=null){ tot=a+b; done=true; } }
-  else { const lv = S.live.find(x=>x.id===p.id); const k = METRICS[p.metric].live;
+  else { const lv = S.live.find(x=>x.id===p.id) || S.past[p.date]?.list.find(x=>x.id===p.id); const k = METRICS[p.metric].live;
     if(lv && k && lv.state!=='pre' && lv.h.st[k]!=null && !Number.isNaN(lv.h.st[k])){ tot = lv.h.st[k]+lv.a.st[k]; done = lv.state==='post'; } }
   let res = '';
   if(done){ res = tot===p.line ? 'P' : ((tot>p.line) === (p.pick==='OVER')) ? 'W' : 'L'; }
@@ -2925,6 +2940,7 @@ function renderPickWeeks(rows){
       <td class="n" style="${col(w.u)}">${w.nu?sgn(w.u,2):'—'}</td>${hasM?`<td class="n" style="${col(w.m)}">${w.nm?money(w.m,true):'—'}</td>`:''}</tr>`).join('')}</tbody>`;
 }
 function renderPicks(){
+  if(!renderPicks.busy){ renderPicks.busy = true; ensurePastFinals().then(ch => { renderPicks.busy = false; if(ch && tab==='picks') renderPicks(); }).catch(() => { renderPicks.busy = false; }); }
   const rows = [...S.picks].sort((x,y)=>(y.date||'').localeCompare(x.date||'')).map(p=>({...p, ...gradePick(p)}));
   const W = rows.filter(r=>r.res==='W').length, Lo = rows.filter(r=>r.res==='L').length, Pu = rows.filter(r=>r.res==='P').length;
   const pend = rows.filter(r=>!r.res).length;
