@@ -205,6 +205,9 @@ tr.out td{opacity:.45;text-decoration:line-through}
 .sumrow td{border-top:2px solid var(--line);font-weight:600}
 .sumrow2 td{font-weight:600;color:var(--muted)}
 .today{color:var(--live);font-weight:600}
+.cuptip{display:inline-block;padding:4px 8px;border-radius:8px;border:1px solid color-mix(in srgb, #d4af37 55%, transparent);font-size:13px}
+.cuptip.ok{background:color-mix(in srgb, var(--over) 14%, transparent)} .cuptip.none{background:color-mix(in srgb, var(--under) 12%, transparent)}
+.cupb{margin:2px 0 6px;padding:6px 10px;border-radius:8px;border:1px solid color-mix(in srgb, #d4af37 55%, transparent);background:color-mix(in srgb, #d4af37 12%, transparent);font-size:13px}
 .tfnext{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb, var(--s2, #e8963a) 8%, transparent)}
 td.lv{background:color-mix(in srgb, var(--live) 8%, transparent)} td.lv.up{color:var(--over);font-weight:700}
 th.lv{color:var(--live)} tr.lvgrp th{border-bottom:0;padding-bottom:0}
@@ -464,6 +467,7 @@ tr.cut td{border-bottom:2px dashed var(--line)}
       <div class="ctl"><label for="sgRange">Periodo</label>
         <select id="sgRange"><option value="0">Toda la temporada</option><option value="30">Últimos 30 días</option><option value="14">Últimos 14 días</option><option value="7">Últimos 7 días</option></select></div>
       <div class="ctl"><label for="sgTeam">Equipo</label><select id="sgTeam"></select></div>
+      <div class="ctl"><label for="sgCup">Tipo de partido</label><select id="sgCup"><option value="">Todos</option><option value="cup">Sólo NBA Cup</option><option value="nocup">Sin NBA Cup</option></select></div>
     </div>
     <div class="kpis" id="sgKpis"></div>
     <div id="sgChart"></div>
@@ -621,6 +625,47 @@ const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
 const median = a => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), m=s.length>>1; return s.length%2?s[m]:(s[m-1]+s[m])/2; };
 const sd = a => { if(a.length<2) return null; const m=mean(a); return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1)); };
 const agg = a => S.stat==='median' ? median(a) : mean(a);
+// ---------- Emirates NBA Cup: fase de grupos = noches de Copa entre equipos del mismo grupo; eliminatorias por la nota de ESPN ----------
+const CUP = {
+  2027: { nights:['2026-10-30','2026-11-06','2026-11-13','2026-11-20','2026-11-24','2026-11-25','2026-11-27'],
+    ko:{ '2026-12-04':'Cuartos de final', '2026-12-05':'Cuartos de final', '2026-12-08':'Semifinal', '2026-12-09':'Semifinal', '2026-12-11':'Final' },
+    groups:{ 'Este A':['DET','TOR','ORL','MIL','BKN'], 'Este B':['NY','CLE','PHI','MIA','IND'], 'Este C':['BOS','ATL','CHA','CHI','WSH'],
+             'Oeste A':['DEN','HOU','PHX','DAL','UTAH'], 'Oeste B':['OKC','MIN','LAC','NO','MEM'], 'Oeste C':['SA','LAL','POR','GS','SAC'] } }
+};
+S.cupNotes = {};   // id → nota de ESPN (para eliminatorias)
+function cupInfo(id, date, h, a, season){
+  const C = CUP[season ?? S.season]; if(!C || !date) return null;
+  const note = S.cupNotes[String(id)] || '';
+  if(C.nights.includes(date)){ const gH = Object.keys(C.groups).find(k => C.groups[k].includes(h)); if(gH && C.groups[gH].includes(a)) return { stage:`Fase de grupos · ${gH}`, counts:true }; }
+  if(C.ko[date] && /cup|copa|in-season/i.test(note)) return { stage: C.ko[date], counts: C.ko[date] !== 'Final' };
+  if(/cup|copa|in-season/i.test(note)) return { stage: note, counts:true };
+  return null;
+}
+const isCupRow = r => !!cupInfo(r.id, r.date, r.h, r.a);
+// Cómo han salido esta temporada los partidos de Copa contra la línea (barato: marcador y línea de DraftKings)
+function cupStats(){
+  const L = seasonGames().filter(g => g.mk?.ou!=null && g.h?.pts!=null && cupInfo(g.id, g.date, norm(g.h.t), norm(g.a.t), g.season));
+  const d = L.map(g => g.h.pts + g.a.pts - g.mk.ou); return d.length ? { n:d.length, avg:mean(d), o:d.filter(x=>x>0).length, u:d.filter(x=>x<0).length } : null;
+}
+// Sugerencia sólo para partidos de la NBA Cup (más prudente que la normal)
+const CUP_EDGE = 4;   // ventaja mínima en puntos para considerar apostar en Copa
+function cupTip(E, g, h, a){
+  const ci = cupInfo(g.id, g.date || S.date, h, a); if(!ci || E.diff==null || !E.sug) return '';
+  const cs = cupStats(), ed = Math.abs(E.diff);
+  const lean = !cs || cs.n < 15 || Math.abs(cs.avg) < 1 ? null : cs.avg < 0 ? 'UNDER' : 'OVER';
+  const trend = lean ? `en Copa los partidos van ${lean==='UNDER'?'abajo':'arriba'} de la línea (${sgn(cs.avg,1)} en ${cs.n})` : 'en Copa todavía no hay una tendencia clara';
+  let verdict, cls;
+  if(!/grupos/i.test(ci.stage)){ verdict = `<b>No apostar o monto mínimo</b>: es ${ci.stage.toLowerCase()}, se juega como playoffs y casi no hay historial para medirlo.`; cls = 'none'; }
+  else if(lean && E.sug !== lean){ verdict = `<b>No apostar</b>: el modelo dice ${E.sug}, pero ${trend}.`; cls = 'none'; }
+  else if(ed < CUP_EDGE){ verdict = `<b>No apostar</b>: ventaja de ${fmt(ed,1)} pts; en Copa conviene sólo con ${CUP_EDGE}+ pts.`; cls = 'none'; }
+  else { verdict = `<b>Apostar a la mitad del monto normal</b> (${E.sug}, ventaja ${fmt(ed,1)} pts)${lean ? ` · va a favor de la tendencia: ${trend}` : ''}.`; cls = 'ok'; }
+  return `<div class="meta"><span class="cuptip ${cls}">🏆 Sugerencia Copa: ${verdict}</span></div>`;
+}
+function cupBadge(g, h, a){
+  const ci = cupInfo(g.id, g.date || S.date, h, a); if(!ci) return '';
+  const cs = cupStats();
+  return `<div class="cupb">🏆 <b>Emirates NBA Cup</b> · ${ci.stage} · ${ci.counts ? 'cuenta en la tabla' : '<b>no cuenta</b> en la tabla ni en estadísticas'}${cs ? `<br><span class="note">Esta temporada en partidos de Copa: real − línea <b>${sgn(cs.avg,1)}</b> (${cs.o} over / ${cs.u} under en ${cs.n}). Revisa el modelo en Seguimiento → Tipo de partido.</span>` : ''}</div>`;
+}
 function etToday(){ return new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()); }
 function addDays(iso,n){ const d=new Date(iso+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
 // Normal CDF (aprox. Abramowitz-Stegun)
@@ -1006,6 +1051,8 @@ function parseScoreboard(j, date){
         st.q1 = q.length>=1 ? q[0] : null; st.h1 = q.length>=2 ? q[0]+q[1] : null;
         return { t:norm(c.team.abbreviation), tid:String(c.team.id ?? ''), st, q };
       };
+      const nt = [...(comp.notes||[]), ...(ev.notes||[])].map(n => n.headline || n.text || '').filter(Boolean).join(' · ');
+      if(nt) S.cupNotes[String(ev.id)] = nt;
       const od = (comp.odds||[])[0];
       const mk = od && od.overUnder!=null && !Number.isNaN(Number(od.overUnder)) ? { ou:Number(od.overUnder), sp: od.spread!=null ? Number(od.spread) : null, p: od.provider?.name || '', det: od.details || '',
         o: od.overOdds ?? od.total?.over?.close?.odds ?? null, u: od.underOdds ?? od.total?.under?.close?.odds ?? null } : null;
@@ -1472,6 +1519,7 @@ function renderCardsInner(){
     if(cur!=null && line!==''){ curCls = cur>Number(line)?'style="color:var(--over)"':(g.state==='post'||db)&&cur<Number(line)?'style="color:var(--under)"':''; }
     return `<article class="card" data-id="${g.id}" data-h="${h}" data-a="${a}">
       <div class="gh">${head}</div>
+      ${cupBadge(g, h, a)}
       <div class="teams">
         <div class="tm">${badge(a)} ${tname(a)} <small>visita</small>${restTag(P.rest?.rA)}</div><div class="v">${fmt(P.A.f,1)} / ${fmt(P.A.c,1)}</div><div class="s">${sCell(curA, scoreA)}</div>
         <div class="tm">${badge(h)} ${tname(h)} <small>local</small>${restTag(P.rest?.rH)}</div><div class="v">${fmt(P.H.f,1)} / ${fmt(P.H.c,1)}</div><div class="s">${sCell(curH, scoreH)}</div>
@@ -1503,6 +1551,7 @@ function renderCardsInner(){
       ${E.sug ? valueHTML(E, key) : ''}
       ${E.sug && (g.state==='pre' || g.state==='manual') ? regHTML(E, line) : ''}
       ${E.sug && (g.state==='pre' || g.state==='manual') ? `<div class="meta">${stakeNote(E, S.odds[key] || {})}</div>` : ''}
+      ${E.sug && (g.state==='pre' || g.state==='manual') ? cupTip(E, g, h, a) : ''}
       ${E.sug ? `<div class="meta">
         <span>Prob. over aprox <b>${E.pOver!=null?Math.round(E.pOver*100)+'%':'—'}</b></span>
         ${LV ? '' : `
@@ -1966,7 +2015,8 @@ function renderSeguimiento(){
   let rows = trackRows();
   const days = Number($('sgRange').value);
   if(days && rows.length){ const last = rows.at(-1).date, from = addDays(last, -days+1); rows = rows.filter(r=>r.date>=from); }
-  const T = $('sgTeam').value;
+  const T = $('sgTeam').value, CF = $('sgCup').value;
+  if(CF) rows = rows.filter(r => (CF==='cup') === isCupRow(r));
   const rowsT = T ? rows.filter(r=>r.h===T || r.a===T) : rows;
   renderModelOdds();
   renderEdges();
@@ -2061,9 +2111,9 @@ const _moCache = new Map();
 function modelOddsRows(){
   const ck = [S.season, S.metric, S.win, S.split, S.stat, S.rest, S.early, $('moMoment').value, $('moValue').value, $('moLine').value, $('sgRange').value, $('sgTeam').value,
     S.games.length, JSON.stringify(S.hist).length, JSON.stringify(S.snaps).length, !!plFor(S.season)].join('|');
-  if(_moCache.has(ck)) return _moCache.get(ck);
-  if(_moCache.size > 30) _moCache.clear();
-  const r = modelOddsRowsCalc(); _moCache.set(ck, r); return r;
+  let r = _moCache.get(ck);
+  if(!r){ if(_moCache.size > 30) _moCache.clear(); r = modelOddsRowsCalc(); _moCache.set(ck, r); }
+  const cf = $('sgCup')?.value; return cf ? r.filter(x => (cf==='cup') === isCupRow(x)) : r;
 }
 function modelOddsRowsCalc(){
   const m = S.metric, f = METRICS[m].f, moment = $('moMoment').value, filt = $('moValue').value, lsrc = $('moLine').value;
@@ -2146,9 +2196,9 @@ function edgeStats(model){
   // las líneas que capturas hoy no cambian los partidos ya terminados: se recalcula cuando hay partidos nuevos o cada 10 min
   const ck = [mo, S.season, S.metric, S.early, S.win, S.rest, S.games.length, !!plFor(S.season), $('moLine').value, Math.floor(Date.now()/600e3)].join('|');
   if(_edCache.has(ck)) return _edCache.get(ck);
-  const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value };
-  $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = '';
-  let rows; try{ rows = modelOddsRows().filter(r => r.mo===mo); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; $('sgRange').value = sv.r; $('sgTeam').value = sv.t; }
+  const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value, c:$('sgCup').value };
+  $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = ''; $('sgCup').value = '';
+  let rows; try{ rows = modelOddsRows().filter(r => r.mo===mo); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; $('sgRange').value = sv.r; $('sgTeam').value = sv.t; $('sgCup').value = sv.c; }
   const pct = L => Math.max(0.5, 0.01*L);
   const B = EDGE_B.map(b => ({ b, rows: rows.filter(r => { const e = Math.abs(r.p - r.line); return e >= b[0] && e < b[1]; }) }));
   for(const x of B){ const R = x.rows; x.w = R.filter(r=>r.res==='W').length; x.l = R.filter(r=>r.res==='L').length; x.p = R.filter(r=>r.res==='P').length;
@@ -2296,7 +2346,7 @@ function renderModelOdds(){
   const col = v => `color:${v>0?'var(--over)':v<0?'var(--under)':'inherit'}`;
   const models = selM ? [selM] : ALL_MODELS;
   // tus picks reales del mismo parámetro y temporada, para comparar
-  const mine = S.picks.filter(p => p.metric===S.metric && finalFromDB(p.id)?.season == S.season && (!$('sgTeam').value || p.h===$('sgTeam').value || p.a===$('sgTeam').value))
+  const mine = S.picks.filter(p => p.metric===S.metric && finalFromDB(p.id)?.season == S.season && (!$('sgTeam').value || p.h===$('sgTeam').value || p.a===$('sgTeam').value) && (!$('sgCup').value || ($('sgCup').value==='cup') === !!cupInfo(p.id, p.date, norm(p.h), norm(p.a))))
     .filter(p => $('moMoment').value==='all' || (($('moMoment').value==='live') === ((p.phase||'pre')==='vivo'))).map(p => ({ ...p, ...gradePick(p) })).filter(p => p.res);
   const line = (lbl, R, mo, hl) => { const W = R.filter(r=>r.res==='W').length, Lo = R.filter(r=>r.res==='L').length, Pu = R.filter(r=>r.res==='P').length;
     const U = R.filter(r=>r.units!=null), u = U.reduce((t,r)=>t+r.units,0), dec = U.length ? mean(U.map(r=>r.dec)) : null;
@@ -2352,6 +2402,7 @@ function sgChart(rows, tol){
 }
 $('sgRange').onchange = () => { S.sgMore = false; renderSeguimiento(); };
 $('sgTeam').onchange = () => { S.sgMore = false; renderSeguimiento(); };
+$('sgCup').onchange = () => { S.sgMore = false; renderSeguimiento(); };
 $('sgTeams').addEventListener('click', e => {
   const k = e.target.closest('th')?.dataset.k; if(!k) return;
   S.sgSort = S.sgSort[0]===k ? [k, -S.sgSort[1]] : [k, k==='t'||k.includes('mae')?1:-1];
@@ -2643,9 +2694,9 @@ function paretoPlayers(){
 }
 // Todas las filas antes del partido (línea tuya o DraftKings), sin filtros de Seguimiento
 function preRows(){
-  const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value, l:$('moLine').value };
-  $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = ''; $('moLine').value = 'any';
-  try{ return modelOddsRows(); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; $('sgRange').value = sv.r; $('sgTeam').value = sv.t; $('moLine').value = sv.l; }
+  const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value, l:$('moLine').value, c:$('sgCup').value };
+  $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = ''; $('moLine').value = 'any'; $('sgCup').value = '';
+  try{ return modelOddsRows(); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; $('sgRange').value = sv.r; $('sgTeam').value = sv.t; $('moLine').value = sv.l; $('sgCup').value = sv.c; }
 }
 // ---------- Equipo partido a partido + pronóstico de sus próximos 5 ----------
 S.sched = {};
