@@ -335,6 +335,7 @@ tr.cut td{border-bottom:2px dashed var(--line)}
         <div class="ctl"><label for="grView">Valor</label><select id="grView"><option value="tot">Total del partido</option><option value="f">Solo el equipo</option><option value="c">Solo el rival</option></select></div>
         <div class="ctl"><label for="grLine">Línea (campana)</label><input type="number" step="0.5" id="grLine" placeholder="ej. 225.5"></div>
         <div class="ctl"><label for="chData">Campana con</label><select id="chData"><option value="cur">Esta temporada</option><option value="both">Esta y la pasada</option></select></div>
+        <div class="ctl"><label for="grCup">Tipo de partido</label><select id="grCup"><option value="">Todos</option><option value="cup">Sólo NBA Cup</option><option value="nocup">Sin NBA Cup</option></select></div>
       </div>
       <div class="chartcard"><h3>Promedio por semana</h3><p class="note" id="chWeekSub"></p><div id="chWeek"></div></div>
       <div class="chartcard"><h3>Equipo partido a partido: proyección, línea y real (+ próximos 5)</h3>
@@ -2527,7 +2528,9 @@ function renderCharts(){
     sels.forEach((el,i) => { el.innerHTML = opts; el.value = store.get('chT'+(i+1), i===0 ? 'DET' : ''); }); }
   const teams = sels.map(el => el.value).filter(Boolean);
   const f = METRICS[S.metric].f, view = $('grView').value, vLbl = view==='f' ? 'lo que hace el equipo' : view==='c' ? 'lo que le hacen' : 'total del partido';
-  const logs = teamLogs(), val = x => { const a=f(x.me), b=f(x.op); if(a==null||b==null) return null; return view==='f'?a:view==='c'?b:a+b; };
+  const logs0 = teamLogs(), cupF = $('grCup').value, logs = {};
+  for(const t in logs0) logs[t] = cupF ? logs0[t].filter(x => grCupOk(x.id, x.date, t, x.opp)) : logs0[t];
+  const val = x => { const a=f(x.me), b=f(x.op); if(a==null||b==null) return null; return view==='f'?a:view==='c'?b:a+b; };
   // ---- 1) promedio por semana ----
   const allWeeks = [...new Set(seasonGames().map(g => weekOf(g.date)))].sort();
   const lg = {}; for(const t in logs) for(const x of logs[t]){ const v = val(x); if(v==null) continue; (lg[weekOf(x.date)] ||= []).push(v); }
@@ -2693,7 +2696,13 @@ function paretoPlayers(){
   $('pjDep').innerHTML = hbars(dep.map(x => ({ label: `${x.t} ${tname(x.t)}`, v: x.v, hl: x.v >= avgDep, txt: `${fmt(x.v,0)}% · ${x.top.map(o=>esc(String(aName(o.aid)).split(' ').slice(-1)[0])).join(', ')}` })), { pl: 150, color: x => x.v >= avgDep ? 'var(--s2)' : 'var(--s1)' });
 }
 // Todas las filas antes del partido (línea tuya o DraftKings), sin filtros de Seguimiento
+// Filtro "Tipo de partido" de Gráficas
+const grCupOk = (id, date, h, a) => { const v = $('grCup')?.value; return !v || (v==='cup') === !!cupInfo(id, date, h, a); };
 function preRows(){
+  const R = preRowsAll(), v = $('grCup')?.value;
+  return v ? R.filter(r => grCupOk(r.id, r.date, r.h, r.a)) : R;
+}
+function preRowsAll(){
   const sv = { mm:$('moMoment').value, mv:$('moValue').value, r:$('sgRange').value, t:$('sgTeam').value, l:$('moLine').value, c:$('sgCup').value };
   $('moMoment').value = 'pre'; $('moValue').value = 'all'; $('sgRange').value = '0'; $('sgTeam').value = ''; $('moLine').value = 'any'; $('sgCup').value = '';
   try{ return modelOddsRows(); } finally { $('moMoment').value = sv.mm; $('moValue').value = sv.mv; $('sgRange').value = sv.r; $('sgTeam').value = sv.t; $('moLine').value = sv.l; $('sgCup').value = sv.c; }
@@ -2863,8 +2872,8 @@ function followTeams(){
 // ---------- 4) Proyección vs. real ----------
 function scatterProj(){
   const mo = $('scModel').value, allR = preRows(), rows = allR.filter(r => r.mo===mo);
-  for(const m of ['pace','avg','mix','players']){ const f = regFit(allR.filter(r => r.mo===m)); if(f) store.set(regKey(m), f); }
-  const fit = regGet(mo);
+  if(!$('grCup').value) for(const m of ['pace','avg','mix','players']){ const f = regFit(allR.filter(r => r.mo===m)); if(f) store.set(regKey(m), f); }
+  const fit = $('grCup').value ? regFit(rows) : regGet(mo);
   if(rows.length < 3){ $('scSub').textContent = ''; $('scChart').innerHTML = '<p class="note">Todavía no hay suficientes partidos con línea.</p>'; $('scMiss').innerHTML = ''; return; }
   const P = rows.map(r=>r.p), A = rows.map(r=>r.act), mp = mean(P), ma = mean(A);
   const cov = mean(rows.map(r => (r.p-mp)*(r.act-ma))), corr = cov / ((sd(P)||1)*(sd(A)||1));
@@ -2905,7 +2914,7 @@ function scatterProj(){
 function heatTeamWeek(){
   const mode = $('hmVal').value, mo = $('scModel').value, f = METRICS[S.metric].f, G = [];
   if(mode==='proj'){ for(const r of preRows()) if(r.mo===mo) G.push({ date:r.date, h:r.h, a:r.a, v:r.act - r.p }); }
-  else for(const g of seasonGames()){ const k = lineKey(g.id), preH = (S.hist[k] || []).filter(e => e.label==='Pre' && e.line!=null).at(-1);
+  else for(const g of seasonGames().filter(g => grCupOk(g.id, g.date, norm(g.h.t), norm(g.a.t)))){ const k = lineKey(g.id), preH = (S.hist[k] || []).filter(e => e.label==='Pre' && e.line!=null).at(-1);
     const L = preH ? preH.line : (S.metric==='pts' ? g.mk?.ou : null), a = f(g.h), b = f(g.a); if(L==null || a==null || b==null) continue;
     G.push({ date:g.date, h:norm(g.h.t), a:norm(g.a.t), v:a + b - Number(L) }); }
   if(!G.length){ $('hmSub').textContent = ''; $('hmChart').innerHTML = '<p class="note">Sin partidos con línea.</p>'; return; }
@@ -2935,7 +2944,8 @@ function heatTeamWeek(){
 }
 document.querySelectorAll('.chT').forEach((el,i) => el.onchange = () => { store.set('chT'+(i+1), el.value); renderCharts(); });
 $('chData').onchange = renderCharts;
-$('grView').onchange = renderCharts; $('grLine').addEventListener('input', renderCharts);
+$('grView').onchange = renderCharts;
+$('grCup').onchange = renderCharts; $('grLine').addEventListener('input', renderCharts);
 for(const id of ['paBy','paModel','scModel','hmVal']) $(id).onchange = renderCharts;
 for(const id of ['tfTeam','tfModel','tfN']) $(id).onchange = () => { try{ teamForecast(); } catch(e){ console.warn('forecast', e); } };
 $('fwModel').onchange = () => followTeams();
